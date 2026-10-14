@@ -1,8 +1,11 @@
 # Local datasets: raw, intermediate, analysis-ready, and all GIS data
-/MA0001_2010_2010_04/
 /data/**
 !/data/**/
 !/data/**/.gitkeep
+
+# 【追加】processed/ フォルダの中身だけはGitの管理対象にする（これを分析に使う）
+!/data/processed/
+!/data/processed/**
 
 # Generated / large outputs (small reviewed tables belong in outputs/tables)
 /outputs/**
