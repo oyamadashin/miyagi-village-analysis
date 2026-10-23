@@ -1,0 +1,65 @@
+# パッケージ読み込み----
+library(tidyverse)
+
+# 津波割合変数をつくる----
+
+## データ読み込み----
+### 集落単位の圃場面積
+farmland_total_by_village <- read_csv("data/processed/farmland_total_by_village.csv")
+
+### 集落単位の津波被災圃場面積
+tsunami_farmland_total_by_village.csv <- read_csv("data/processed/tsunami_farmland_total_by_village.csv")
+
+
+## 結合前の準備----
+
+### KEYが集落事に一意になっているかチェック　→　重複無し
+farmland_total_by_village |> 
+  count(KEY) |> 
+  filter(n > 1)
+
+tsunami_farmland_total_by_village.csv |> 
+  count(KEY) |> 
+  filter(n > 1)
+
+
+### 結合できない集落はあるか　→　あるが、津波被災のない集落と思われる
+farmland_total_by_village |>
+  anti_join(tsunami_farmland_total_by_village.csv, by = "KEY")
+
+### 逆方向に結合すると結合できない集落はゼロ。
+tsunami_farmland_total_by_village.csv |>
+  anti_join(farmland_total_by_village, by = "KEY")
+
+## 両データを結合し、津波被災面積割合変数を作成。
+df <-  farmland_total_by_village |> 
+  left_join(tsunami_farmland_total_by_village.csv, by = "KEY") |> 
+  mutate(
+    tsunami_total_ha = replace_na(tsunami_total_ha, 0),
+    tsunami_farmland_share = if_else(
+      farmland_total_ha > 0,
+      tsunami_total_ha / farmland_total_ha,
+      NA_real_
+    )
+  )
+
+
+## 結合後のチェック----
+### 津波被災割合が1を超えていないかチェック→超えている
+
+df |>
+  filter(tsunami_farmland_share > 1)
+
+### 閾値を少しだけ上げると該当集落ゼロ→1を超えたのは誤差と思われる
+df |>
+  filter(tsunami_farmland_share > 1.0001)
+
+### 1を超えた集落については強制的に1に置き換える
+df <- df |>
+  mutate(
+    tsunami_farmland_share = pmin(tsunami_farmland_share, 1)
+  )
+
+df |>
+  filter(tsunami_farmland_share > 1)
+
