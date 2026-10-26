@@ -44,22 +44,28 @@ outputs/large/           大容量出力（Git対象外）
 
 # 各データの詳細
 
-- GIS関連
-  - 2010年時点集落境界データ（宮城県）
-    - MA0001_2010_2010_04\rcom.shp
-    - パス：C:\Users\user\Documents\r_analysis\miyagi-village-analysis\data\raw\gis\MA0001_2010_2010_04\rcom.shp
-    - 入手元：https://www.maff.go.jp/j/tokei/census/shuraku_data/2010/ma/index.html（農林水産省, 地域の農業を見て・知って・活かすDB ～農林業センサスを中心とした総合データベース～）
-  - 2009年時点圃場位置データ（宮城県）
-    - L03-b-09_5640-jgd_GML\L03-b-09_5640.shp
-    - パス：C:\Users\user\Documents\r_analysis\miyagi-village-analysis\data\raw\gis\L03-b-09_5640-jgd_GML\L03-b-09_5640.shp
-      - (6つのデータで宮城県全体を覆う。5640の部分は他に5641, 5740, 5741, 5840, 5841のパターンがある)
-    - 入手元：https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-L03-b.html?utm_source=chatgpt.com (国土数値情報)
-    - 備考：世界測地系の方をダウンロード（日本測地系の方は古いデータとの互換性のために残されているだけ）
-  - 津波浸水範囲（宮城県）
-    - SHP\浸水範囲全体.shp
-    - パス：C:\Users\user\Documents\r_analysis\miyagi-village-analysis\data\raw\gis\SHP\浸水範囲全体.shp
-    - 入手元：国土地理院技術資料（2026年8月に申請して入手）
-    - 備考：
-      - 正式な資料名は「D1-No.589 平成23年（2011年）東日本大震災2.5万分１浸水範囲概況図（宮城県版）」。
-      - 入手時の注意事項は以下の通り：
-        - 地震後に撮影した空中写真及び観測された衛星画像を使用して判読したものです。浸水があった地域でも把握できていない箇所や雲等により浸水範囲が十分に判読できていない箇所があります。 
+## GIS関連
+
+- 2010年時点集落境界データ（宮城県）
+  - MA0001_2010_2010_04\rcom.shp
+  - パス：C:\Users\user\Documents\r_analysis\miyagi-village-analysis\data\raw\gis\MA0001_2010_2010_04\rcom.shp
+  - 入手元：https://www.maff.go.jp/j/tokei/census/shuraku_data/2010/ma/index.html（農林水産省, 地域の農業を見て・知って・活かすDB ～農林業センサスを中心とした総合データベース～）
+- 2009年時点圃場位置データ（宮城県）
+  - L03-b-09_5640-jgd_GML\L03-b-09_5640.shp
+  - パス：C:\Users\user\Documents\r_analysis\miyagi-village-analysis\data\raw\gis\L03-b-09_5640-jgd_GML\L03-b-09_5640.shp
+    - (6つのデータで宮城県全体を覆う。5640の部分は他に5641, 5740, 5741, 5840, 5841のパターンがある)
+  - 入手元：https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-L03-b.html?utm_source=chatgpt.com (国土数値情報)
+  - 備考：世界測地系の方をダウンロード（日本測地系の方は古いデータとの互換性のために残されているだけ）
+- 津波浸水範囲（宮城県）
+  - SHP\浸水範囲全体.shp
+  - パス：C:\Users\user\Documents\r_analysis\miyagi-village-analysis\data\raw\gis\SHP\浸水範囲全体.shp
+  - 入手元：国土地理院技術資料（2026年8月に申請して入手）
+  - 備考：
+    - 正式な資料名は「D1-No.589 平成23年（2011年）東日本大震災2.5万分１浸水範囲概況図（宮城県版）」。
+    - 入手時の注意事項は以下の通り：
+      - 地震後に撮影した空中写真及び観測された衛星画像を使用して判読したものです。浸水があった地域でも把握できていない箇所や雲等により浸水範囲が十分に判読できていない箇所があります。 
+
+## センサス関連
+
+- 経営耕地面積規模別経営体数
+  - 2025年：SA1025_2025_2025_00.xlsx

@@ -4,6 +4,126 @@ output: html_document
 date: "2026-10-23"
 ---
 
+```{r}
+source(file = "preparation.R")
+```
+
+
+
+```{r}
+
+library(readxl)
+
+
+# 2025年経営規模別経営体数データ読み込み
+farmsize_2025 <- read_excel("data/raw/census/SA1025_2025_2025_00.xlsx",
+                                col_types = "text")
+
+# 宮城県だけ抽出
+farmsize_miyagi_2025 <- farmsize_2025 |> 
+  filter(pref == "04")
+
+# Excelファイルとして保存
+write_excel_csv(farmsize_miyagi_2025, 
+          "data/processed/farmsize_miyagi_2025.csv")
+
+farmsize_miyagi_2025
+
+# 集落単位でないデータを除外する
+farmsize_miyagi_2025_village <- farmsize_miyagi_2025 |> 
+  filter(rcom != "000")
+
+# GISデータに存在しない集落を確認 → 該当数253
+farmsize_miyagi_2025_village |>
+  anti_join(df, by = c("key" = "KEY")) |>
+  nrow()
+
+
+  # 逆方向も確認 → 該当数13
+df |>
+  anti_join(
+    farmsize_miyagi_2025_village,
+    by = c("KEY" = "key")
+  ) |>
+  nrow()
+
+# 該当しない253件がどの市町村に集中しているかをチェック
+unmatched_census <- farmsize_miyagi_2025_village |>
+  anti_join(df, by = c("key" = "KEY"))
+
+unmatched_census |>
+  count(city_name, sort = TRUE)
+
+# 該当しない253件について、経営体数を整理
+unmatched_census |>
+  count(`計`, sort = TRUE)
+
+# 該当しない253件のなかで経営体数の多い(10以上)地域を抽出。
+# → 12件は富谷市（2016年から市制施行）
+unmatched_census |>
+  mutate(
+    entities_total = as.numeric(
+      na_if(`計`, "-")
+    )
+  ) |>
+  filter(entities_total >= 10) |>
+  select(
+    key, city_name, kcity_name,
+    rcom_name, entities_total
+  ) |>
+  arrange(desc(entities_total))
+
+# 富谷町のデータはGISデータにあるか？→12件存在。
+df |>
+  filter(str_starts(KEY, "04423")) |>
+  select(KEY, farmland_total_ha)
+
+# 2010年GISデータの富谷町の集落コード
+df |>
+  filter(str_starts(KEY, "04423")) |>
+  mutate(village_code = str_sub(KEY, 6, 10)) |>
+  select(KEY, village_code)
+
+# 2025年センサスの富谷市の集落コード
+# →GISデータの集落コードと一致→市町村コードが変更したことでkeyがずれたのだろう
+farmsize_miyagi_2025_village |>
+  filter(city == "216") |>
+  mutate(village_code = str_sub(key, 6, 10)) |>
+  select(key, village_code, rcom_name)
+
+# 2025年センサスの富谷市コードを旧富谷町コードに変換
+farmsize_miyagi_2025_village <-
+  farmsize_miyagi_2025_village |>
+  mutate(
+    key_original = key,
+    key = if_else(
+      str_starts(key, "04216"),
+      str_replace(key, "^04216", "04423"),
+      key
+    )
+  )
+
+
+# あらためて、GISデータに存在しない集落を確認 → 該当数241に減少。
+farmsize_miyagi_2025_village |>
+  anti_join(df, by = c("key" = "KEY")) |>
+  nrow()
+
+# 該当しない13件の内訳をチェック 
+unmatched_gis <- df |>
+  anti_join(
+    farmsize_miyagi_2025_village,
+    by = c("KEY" = "key")
+  )
+
+unmatched_gis |>
+  select(KEY, everything())
+```
+
+```{r}
+df
+```
+
 
 ```{r}
 df |> 
@@ -36,9 +156,12 @@ tsunami_farmland_total_by_village.csv |>
   filter(n > 1)
 
 
-## 結合できない集落はあるか　→　あるが、津波被災のない集落と思われる
+## 結合できない集落はあるか　→　あるが(2,116件)、津波被災のない集落と思われる
 farmland_total_by_village |>
   anti_join(tsunami_farmland_total_by_village.csv, by = "KEY")
+
+
+
 
 ## 逆方向に結合すると結合できない集落はゼロ。
 tsunami_farmland_total_by_village.csv |>

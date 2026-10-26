@@ -1,5 +1,6 @@
 # パッケージ読み込み----
 library(tidyverse)
+library(readxl)
 
 # 津波割合変数をつくる----
 
