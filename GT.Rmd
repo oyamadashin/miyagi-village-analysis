@@ -1,0 +1,297 @@
+---
+title: "GT"
+output: html_document
+date: "2026-10-28"
+---
+
+# source
+
+```{r}
+source(file = "preparation.R")
+```
+
+# 分析対象集落数
+
+```{r}
+# 分析対象集落数
+nrow(df_tsunami_all)
+```
+
+n = 453
+
+
+# 経営体数
+
+## 年次別の経営体総数の欠損状況
+
+```{r}
+# 年次別の経営体総数の欠損状況
+df_tsunami_all |>
+  summarise(
+    across(
+      matches("^entities_total_20(10|15|20|25)$"),
+      list(
+        valid = ~ sum(!is.na(.x)),
+        zero = ~ sum(.x == 0, na.rm = TRUE),
+        missing = ~ sum(is.na(.x))
+      )
+    )
+  )
+```
+
+2020年度は異様に欠損が多い(99)。
+
+
+### なぜ2020年は欠損が多い？
+
+
+```{r}
+df_tsunami_all |>
+  filter(is.na(entities_total_2020)) |>
+  summarise(
+    n = n(),
+    zero_2010 = sum(entities_total_2010 == 0, na.rm = TRUE),
+    zero_2015 = sum(entities_total_2015 == 0, na.rm = TRUE),
+    zero_2025 = sum(entities_total_2025 == 0, na.rm = TRUE),
+    mean_2010 = mean(entities_total_2010, na.rm = TRUE),
+    mean_2025 = mean(entities_total_2025, na.rm = TRUE)
+  )
+```
+2020年以外の年次で経営体数がゼロの集落はそこまで多くない
+
+
+```{r}
+census_2020_for_check <- rename(census_2020, entities_total_2020 = 計_2020)
+```
+
+```{r}
+df_tsunami_all |>
+  filter(is.na(entities_total_2020)) |>
+  select(KEY) |>
+  left_join(
+    census_2020_for_check |>
+      select(key, entities_total_2020),
+    by = c("KEY" = "key")
+  ) |>
+  count(entities_total_2020, sort = TRUE)
+```
+2020年欠損の99集落はすべて秘匿データ。
+
+ここで仮説:
+・まず、秘匿になるのは経営体数1や2などの、極端に経営体数の少ない地域。
+・一方で、経営体数が0になれば秘匿すべきデータ自体ないことになるので、秘匿から外れる。
+・2010年時点では経営体数が多くても、津波被災地域の多くは2015年以降、経営体数が急減している可能性が高い。
+・2015年以降は0～1, 2くらいの範囲で経営体数が変動していて、秘匿になったりゼロになったりしているのでは。そして、2020年は0を上回る集落がたまたま多かったのではないか。
+
+
+```{r}
+df_tsunami_all |>
+  filter(is.na(entities_total_2020)) |>
+  select(
+    KEY,
+    entities_total_2015,
+    entities_total_2025
+  ) |>
+  pivot_longer(
+    cols = starts_with("entities_total"),
+    names_to = "year",
+    values_to = "entities"
+  ) |>
+  count(year, entities) |>
+  arrange(year, entities)
+```
+
+秘匿集落の2015, 2025年データをみると、経営体数が0～2の範囲に集中していることがわかる。
+
+```{r}
+df_tsunami_all |>
+  mutate(
+    suppressed_2020 = if_else(
+      is.na(entities_total_2020),
+      "秘匿あり",
+      "秘匿なし"
+    )
+  ) |>
+  group_by(suppressed_2020) |>
+  summarise(
+    n = n(),
+    mean_2015 = mean(entities_total_2015, na.rm = TRUE),
+    mean_2025 = mean(entities_total_2025, na.rm = TRUE),
+    share_0_2_2015 = mean(entities_total_2015 <= 2, na.rm = TRUE),
+    share_0_2_2025 = mean(entities_total_2025 <= 2, na.rm = TRUE)
+  )
+```
+
+秘匿あり集落の方が、2015年、2025年において、経営体数0～2の集落の割合が大きい。
+
+```{r}
+df_tsunami_all |>
+  count(entities_total_2020) |>
+  arrange(entities_total_2020) |>
+  print(n = 20)
+```
+
+2020センサスでは経営体数1～2のデータが見当たらない→やはりこの範囲で秘匿が行われている可能性が高い
+→　「調査対象数が2以下の場合には、調査結果の秘密保護の観点から、当該結果を「x」表示とする秘匿措置を施しています。」とのことだった。
+このあたりのサイト参照
+https://www.maff.go.jp/j/tokei/census/shuraku_data/2025/sa/2025/sa_2025.html
+
+
+```{r}
+df_tsunami_all |>
+  select(matches("^entities_total_20")) |>
+  pivot_longer(
+    everything(),
+    names_to = "year",
+    values_to = "entities"
+  ) |>
+  mutate(
+    category = case_when(
+      is.na(entities) ~ "秘匿・欠損",
+      entities == 0 ~ "0",
+      entities == 1 ~ "1",
+      entities == 2 ~ "2",
+      TRUE ~ "3以上"
+    )
+  ) |>
+  count(year, category) |>
+  pivot_wider(
+    names_from = category,
+    values_from = n,
+    values_fill = 0
+  )
+```
+これはなんだろう？　2020年だけ秘匿基準が厳しくて、他の年次だと経営体数1～2でも秘匿せずに公開してしまっているということ？
+
+秘匿問題はここで打ち切ろう。以下、ChatGPTによる落とし所。
+> 2020年農林業センサスでは、経営体数が1～2の農業集落について秘匿処理が行われたと考えられるため、経営体総数が欠損する集落が多数存在した。このため、本研究では2010年、2015年、2025年を中心に分析を行った。
+
+
+秘匿データはシンプルに分析に除外するということにしよう。
+
+## 経営体数階層別の度数分布
+
+```{r}
+df_tsunami_all |>
+  filter(!is.na(entities_total_2010)) |>
+  mutate(
+    size_group_2010 = cut(
+      entities_total_2010,
+      breaks = c(-Inf, 2, 5, 10, 20, Inf),
+      labels = c("0-2", "3-5", "6-10", "11-20", "21以上")
+    )
+  ) |>
+  group_by(size_group_2010) |>
+  summarise(
+    n = n(),
+    mean_2010 = mean(entities_total_2010),
+    mean_2025 = mean(entities_total_2025),
+    zero_share_2025 = mean(entities_total_2025 == 0),
+    .groups = "drop"
+  )
+```
+
+- 経営体数10以下の集落が多い。分析の際は注意が必要。
+- どの階層でも経営体数平均値は2010→2025に大きく減少する傾向（どの階層も1/3くらいになっている）
+- 経営体数21以上だと2025年時点で経営体数0になった集落はかなり少ない。
+
+# 津波被災割合
+
+## 津波被災割合の分布
+
+```{r}
+# 津波被災割合の分布
+df_tsunami_all |>
+  summarise(
+    n = n(),
+    min = min(tsunami_farmland_share, na.rm = TRUE),
+    q25 = quantile(tsunami_farmland_share, 0.25, na.rm = TRUE),
+    median = median(tsunami_farmland_share, na.rm = TRUE),
+    q75 = quantile(tsunami_farmland_share, 0.75, na.rm = TRUE),
+    max = max(tsunami_farmland_share, na.rm = TRUE)
+  )
+```
+
+Q75がかなり大きい→圃場がほぼすべて浸水したという集落が多いようだ。
+
+
+## 経営体数階層×津波被災割合
+
+```{r}
+df_tsunami_all |>
+  filter(!is.na(entities_total_2010)) |>
+  mutate(
+    size_group_2010 = cut(
+      entities_total_2010,
+      breaks = c(-Inf, 2, 5, 10, 20, Inf),
+      labels = c("0-2", "3-5", "6-10", "11-20", "21以上")
+    )
+  ) |>
+  group_by(size_group_2010) |>
+  summarise(
+    n = n(),
+    mean_damage = mean(tsunami_farmland_share, na.rm = TRUE),
+    median_damage = median(tsunami_farmland_share, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+経営体数が多い階層ほど、津波被災割合が大きい。
+→　地形が交絡変数になっているのではないだろうか？
+（平地の方が農作業に適しているから集落内の経営体数が多くなる一方、平地であるがゆえに津波浸水の影響を受けやすい、ということではないか）
+
+
+```{r}
+df_tsunami_all |>
+  filter(!is.na(entities_total_2010)) |>
+  summarise(
+    cor_farms_damage = cor(
+      entities_total_2010,
+      tsunami_farmland_share,
+      use = "complete.obs",
+      method = "spearman"
+    ),
+    cor_farms_area = cor(
+      entities_total_2010,
+      farmland_total_ha,
+      use = "complete.obs",
+      method = "spearman"
+    ),
+    cor_area_damage = cor(
+      farmland_total_ha,
+      tsunami_farmland_share,
+      use = "complete.obs",
+      method = "spearman"
+    )
+  )
+```
+
+地形の代理変数として、集落の農地面積を使ってみよう。
+・農地面積が大きいほど経営体数が多い傾向は明らか（r = 0.74）
+・農地面積が大きいほど被災割合が大きい傾向はあるが弱い（r = 0.27）
+
+```{r}
+
+df_cor <- df_tsunami_all |>
+  dplyr::select(
+    entities_total_2010,
+    farmland_total_ha,
+    tsunami_farmland_share
+  ) |>
+  tidyr::drop_na()
+
+ppcor::pcor.test(
+  x = df_cor$entities_total_2010,
+  y = df_cor$tsunami_farmland_share,
+  z = df_cor$farmland_total_ha,
+  method = "spearman"
+)
+```
+
+農地面積を統制して、経営体数と被災割合の偏相関を求めた
+→　やはり相関は残る。
+
+ただ、それでもさっきの地形仮説が退けられたわけではない（農地面積だけで地形情報をすべてカバーすることはできない）
+
+
+

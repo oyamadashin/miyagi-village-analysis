@@ -9,10 +9,12 @@ library(stringr)
 
 ## データ読み込み----
 ### 集落単位の圃場面積
-farmland_total_by_village <- read_csv("data/processed/farmland_total_by_village.csv")
+farmland_total_by_village <- read_csv("data/processed/farmland_total_by_village.csv",
+                                      show_col_types = FALSE)
 
 ### 集落単位の津波被災圃場面積
-tsunami_farmland_total_by_village.csv <- read_csv("data/processed/tsunami_farmland_total_by_village.csv")
+tsunami_farmland_total_by_village.csv <- read_csv("data/processed/tsunami_farmland_total_by_village.csv",
+                                                  show_col_types = FALSE)
 
 
 ## 結合前の準備----
@@ -158,10 +160,10 @@ farmsize_2025 <- read_excel(
 
 
 ### 各規模階層の経営体数変数名が重複しないよう年次をつける
-census_2010 <- prepare_census(farmsize_miyagi_2010_village, 2010)
-census_2015 <- prepare_census(farmsize_miyagi_2015_village, 2015)
-census_2020 <- prepare_census(farmsize_miyagi_2020_village, 2020)
-census_2025 <- prepare_census(farmsize_miyagi_2025_village, 2025)
+census_2010 <- prepare_census(farmsize_2010, 2010)
+census_2015 <- prepare_census(farmsize_2015, 2015)
+census_2020 <- prepare_census(farmsize_2020, 2020)
+census_2025 <- prepare_census(farmsize_2025, 2025)
 
 ### GISデータから津波被災集落を抽出
 df_tsunami <- df |>
