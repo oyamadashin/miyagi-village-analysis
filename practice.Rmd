@@ -9,6 +9,54 @@ source(file = "preparation.R")
 ```
 
 
+```{r}
+
+# 旧市区町村コードを作成
+df_tsunami_all <- df_tsunami_all |>
+  mutate(
+    area_code = paste0(
+      str_sub(KEY, 3, 5),
+      "-",
+      str_sub(KEY, 6, 7)
+    )
+  )
+
+# 政策データの読み込み
+df_policy <- read_csv(
+  "data/processed/c1_c4_production_support_check.csv",
+  locale = locale(encoding = "CP932"),
+  col_types = cols(area_code = col_character())
+)
+
+# 結合
+df_tsunami_all <- df_tsunami_all |>
+  left_join(
+    df_policy |>
+      select(area_code, c_one, c_four, production_support),
+    by = "area_code",
+    relationship = "many-to-one"
+  )
+
+
+df_tsunami_all |>
+  summarise(
+    n_settlements = n(),
+    n_regions = n_distinct(area_code),
+    unmatched = sum(is.na(c_one))
+  )
+
+
+df_tsunami_all |>
+  distinct(
+    area_code,
+    c_one,
+    c_four,
+    production_support
+  ) |>
+  count(c_one, c_four, production_support)
+```
+
+
 
 ```{r}
 # 津波浸水割合データに経営規模別経営体数データを結合
