@@ -37,7 +37,7 @@ farmland_total_by_village |>
 tsunami_farmland_total_by_village.csv |>
   anti_join(farmland_total_by_village, by = "KEY")
 
-## 両データを結合し、津波被災面積割合変数を作成。
+### 両データを結合し、津波被災面積割合変数を作成。
 df <-  farmland_total_by_village |> 
   left_join(tsunami_farmland_total_by_village.csv, by = "KEY") |> 
   mutate(
@@ -49,6 +49,19 @@ df <-  farmland_total_by_village |>
     )
   )
 
+### KEYを別々のコードに分離
+df <- df |>
+  mutate(
+    pref_code = substr(KEY, 1, 2),
+    city_code = substr(KEY, 3, 5),
+    kcity_code = substr(KEY, 6, 7),
+    village_code = substr(KEY, 8, 10)
+  )
+
+df <- df |>
+  mutate(
+    area_code = paste0(city_code, "-", kcity_code)
+  )
 
 ## 結合後のチェック----
 ### 津波被災割合が1を超えていないかチェック→超えている
@@ -360,5 +373,8 @@ df_tsunami_all |>
     total_missing = sum(n_missing),
     .groups = "drop"
   )
+
+### 分析で使いやすいように名前変更（津波被災地のみのデータフレーム）
+df_tsunami <-  df_tsunami_all
 
 # ----

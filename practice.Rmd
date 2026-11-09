@@ -10,6 +10,11 @@ source(file = "preparation.R")
 
 
 ```{r}
+df_tsunami
+```
+
+
+```{r}
 
 # 旧市区町村コードを作成
 df_tsunami_all <- df_tsunami_all |>
