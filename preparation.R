@@ -1,7 +1,6 @@
 # パッケージ読み込み----
 library(tidyverse)
 library(readxl)
-library(stringr)
 
 
 
@@ -17,25 +16,7 @@ tsunami_farmland_total_by_village.csv <- read_csv("data/processed/tsunami_farmla
                                                   show_col_types = FALSE)
 
 
-## 結合前の準備----
 
-### KEYが集落事に一意になっているかチェック　→　重複無し
-farmland_total_by_village |> 
-  count(KEY) |> 
-  filter(n > 1)
-
-tsunami_farmland_total_by_village.csv |> 
-  count(KEY) |> 
-  filter(n > 1)
-
-
-### 結合できない集落はあるか　→　あるが、津波被災のない集落と思われる
-farmland_total_by_village |>
-  anti_join(tsunami_farmland_total_by_village.csv, by = "KEY")
-
-### 逆方向に結合すると結合できない集落はゼロ。
-tsunami_farmland_total_by_village.csv |>
-  anti_join(farmland_total_by_village, by = "KEY")
 
 ### 両データを結合し、津波被災面積割合変数を作成。
 df <-  farmland_total_by_village |> 
@@ -63,70 +44,20 @@ df <- df |>
     area_code = paste0(city_code, "-", kcity_code)
   )
 
-## 結合後のチェック----
-### 津波被災割合が1を超えていないかチェック→超えている
 
-df |>
-  filter(tsunami_farmland_share > 1)
 
-### 閾値を少しだけ上げると該当集落ゼロ→1を超えたのは誤差と思われる
-df |>
-  filter(tsunami_farmland_share > 1.0001)
-
-### 1を超えた集落については強制的に1に置き換える
+### 津波被災割合が1を超えた集落については強制的に1に置き換える
 df <- df |>
   mutate(
     tsunami_farmland_share = pmin(tsunami_farmland_share, 1)
   )
 
-df |>
-  filter(tsunami_farmland_share > 1)
 
 
+# センサスデータの結合----
 
-# 経営規模別経営体数データを結合----
+## 関数定義：各年のセンサスデータを結合用に加工する関数----
 
-## 結合できるかどうかチェック----
-
-### 2025年センサス読み込み
-farmsize_2025 <- read_excel(
-  "data/raw/census/SA1025_2025_2025_00.xlsx",
-  col_types = "text"
-)
-
-### 宮城県の農業集落だけ抽出
-farmsize_miyagi_2025_village <- farmsize_2025 |>
-  filter(
-    pref == "04",
-    rcom != "000"
-  )
-
-### GISデータから津波被災集落を抽出
-df_tsunami <- df |>
-  filter(tsunami_farmland_share > 0)
-
-### KEYの重複確認
-df_tsunami |>
-  count(KEY) |>
-  filter(n > 1)
-
-farmsize_miyagi_2025_village |>
-  count(key) |>
-  filter(n > 1)
-
-### 結合
-df_tsunami_2025 <- df_tsunami |>
-  left_join(
-    farmsize_miyagi_2025_village,
-    by = c("KEY" = "key"),
-    relationship = "one-to-one"
-  )
-
-# 結合が問題なくできることが確認できたので、他の時点のセンサスデータも含めて改めて結合
-
-## 2010～2025年センサスデータをGISデータに結合----
-
-### 各年のセンサスデータを結合用に加工する関数
 prepare_census <- function(data, year) {
   data |>
     filter(
@@ -136,7 +67,8 @@ prepare_census <- function(data, year) {
     select(
       -pref, -city, -kcity, -rcom,
       -pref_name, -city_name,
-      -kcity_name, -rcom_name
+      -kcity_name, -rcom_name,
+      -`データ年次`
     ) |>
     rename_with(
       ~ paste0(.x, "_", year),
@@ -144,28 +76,31 @@ prepare_census <- function(data, year) {
     )
 }
 
-### 2010年センサス読み込み
+## 経営規模別経営体数データを結合----
+
+
+### 2010年経営規模別経営体数データ読み込み
 farmsize_2010 <- read_excel(
   "data/raw/census/SA1025_2010_2025_00.xlsx",
   col_types = "text"
 )
 
 
-### 2015年センサス読み込み
+### 2015年経営規模別経営体数データ読み込み
 farmsize_2015 <- read_excel(
   "data/raw/census/SA1025_2015_2025_00.xlsx",
   col_types = "text"
 )
 
 
-### 2020年センサス読み込み
+### 2020年経営規模別経営体数データ読み込み
 farmsize_2020 <- read_excel(
   "data/raw/census/SA1025_2020_2025_00.xlsx",
   col_types = "text"
 )
 
 
-### 2025年センサス読み込み
+### 2025年経営規模別経営体数データ読み込み
 farmsize_2025 <- read_excel(
   "data/raw/census/SA1025_2025_2025_00.xlsx",
   col_types = "text"
@@ -173,57 +108,73 @@ farmsize_2025 <- read_excel(
 
 
 ### 各規模階層の経営体数変数名が重複しないよう年次をつける
-census_2010 <- prepare_census(farmsize_2010, 2010)
-census_2015 <- prepare_census(farmsize_2015, 2015)
-census_2020 <- prepare_census(farmsize_2020, 2020)
-census_2025 <- prepare_census(farmsize_2025, 2025)
+farmsize_2010_value_year <- prepare_census(farmsize_2010, 2010)
+farmsize_2015_value_year <- prepare_census(farmsize_2015, 2015)
+farmsize_2020_value_year <- prepare_census(farmsize_2020, 2020)
+farmsize_2025_value_year <- prepare_census(farmsize_2025, 2025)
 
 ### GISデータから津波被災集落を抽出
 df_tsunami <- df |>
   filter(tsunami_farmland_share > 0)
 
-### GISデータとセンサスデータの結合
-df_tsunami_all <- df_tsunami |>
-  left_join(census_2010,
+### 津波被災集落GISをデータと経営規模別経営体数データの結合
+df_tsunami <- df_tsunami |>
+  left_join(farmsize_2010_value_year,
             by = c("KEY" = "key"),
             relationship = "one-to-one") |>
-  left_join(census_2015,
+  left_join(farmsize_2015_value_year,
             by = c("KEY" = "key"),
             relationship = "one-to-one") |>
-  left_join(census_2020,
+  left_join(farmsize_2020_value_year,
             by = c("KEY" = "key"),
             relationship = "one-to-one") |>
-  left_join(census_2025,
+  left_join(farmsize_2025_value_year,
             by = c("KEY" = "key"),
             relationship = "one-to-one")
 
 
-### 結合して行数が変わっていないことをチェック→変わっていない
-nrow(df_tsunami)
-nrow(df_tsunami_all)
 
-### 各年次で結合できないKEYはないか→ない
-list(
-  "2010" = census_2010,
-  "2015" = census_2015,
-  "2020" = census_2020,
-  "2025" = census_2025
-) |>
-  purrr::map_int(
-    ~ anti_join(
-      df_tsunami,
-      .x,
-      by = c("KEY" = "key")
-    ) |>
-      nrow()
-  )
 
-## 変数名を変える----
+## 農業用機械の所有経営体数と所有台数データを結合----
+
+# 2010, 2015年センサス読み込み
+
+
+machinery_2010 <- read_excel(
+  "data/raw/census/SA1053_2010_2025_00.xlsx",
+  col_types = "text"
+)
+
+machinery_2015 <- read_excel(
+  "data/raw/census/SA1053_2015_2025_00.xlsx",
+  col_types = "text"
+)
+
+
+# 各規模階層の機械関連変数名が重複しないよう年次をつける
+
+
+machinery_2010_value_year <- prepare_census(machinery_2010, 2010)
+machinery_2015_value_year <- prepare_census(machinery_2015, 2015)
+
+## 結合
+
+df_tsunami <- df_tsunami |>
+  left_join(machinery_2010_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") |>
+  left_join(machinery_2015_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") 
+
+
+
+# 変数名を変える----
 
 
 ### 日本語名と英語名の対応表
 name_map <- c(
-  "計" = "entities_total",
+  "計" = "entities_total", # ここから、規模別経営体数関連変数
   "経営耕地なし" = "size_none",
   "0.3ha未満" = "size_under_0_3",
   "0.3～0.5" = "size_0_3_0_5",
@@ -238,11 +189,28 @@ name_map <- c(
   "30.0～50.0" = "size_30_50",
   "50.0～100.0" = "size_50_100",
   "100～150" = "size_100_150",
-  "150ha以上" = "size_150_plus"
+  "100.0～150.0" = "size_100_150",
+  "150ha以上" = "size_150_plus",
+  "動力田植機_経営体数" = "transplanter_entities", #ここから、機械保有関連変数
+  "動力田植機_台数" = "transplanter_units",
+  "トラクター_経営体数" = "tractor_entities",
+  "トラクター_台数"= "tractor_units",
+  "コンバイン_経営体数" = "combine_entities",
+  "コンバイン_台数"= "combine_units"
 )
 
+# 変数名対応表をCSVとして保存
+name_map |>
+  enframe(
+    name = "original_name",
+    value = "variable_name"
+  ) |>
+  write_excel_csv("data/processed/variable_name_map.csv")
+
+
+
 ### 4時点の変数名を一括変更
-old_names <- names(df_tsunami_all)
+old_names <- names(df_tsunami)
 
 new_names <- vapply(old_names, function(x) {
   
@@ -258,76 +226,26 @@ new_names <- vapply(old_names, function(x) {
 }, character(1), USE.NAMES = FALSE)
 
 ### 変数名を変更
-names(df_tsunami_all) <- new_names
+names(df_tsunami) <- new_names
 
-### 変更された変数名を確認
-tibble(
-  old_name = old_names,
-  new_name = new_names
-) |>
-  filter(old_name != new_name)
 
-### 変換された変数の数を年次別に確認
-tibble(
-  old_name = old_names,
-  new_name = new_names
-) |>
-  filter(old_name != new_name) |>
-  mutate(year = str_extract(new_name, "20(10|15|20|25)$")) |>
-  count(year)
-
-### 2025年だけ100-150ha階層がおかしいので変換がうまくできてない
-### 個別に変換しておく
-df_tsunami_all <- df_tsunami_all |>
-  rename(
-    size_100_150_2025 = `100.0～150.0_2025`
-  )
 
 
 ## 各階層の値を数値型に変換----
 
-### 経営体数関連の変数を抽出
-entity_vars <- names(df_tsunami_all) |>
-  str_subset("^(entities_total|size_)")
-
-### 数値以外の値を確認
-df_tsunami_all |>
-  select(all_of(entity_vars)) |>
-  pivot_longer(
-    everything(),
-    names_to = "variable",
-    values_to = "value"
-  ) |>
-  filter(
-    !is.na(value),
-    !str_detect(value, "^[0-9]+$")
-  ) |>
-  count(value, sort = TRUE)
-
-### @は時点間で接続不能のデータ。→該当5つだ。分析にはあまり影響なし。
-df_tsunami_all |>
-  select(KEY, all_of(entity_vars)) |>
-  pivot_longer(
-    cols = all_of(entity_vars),
-    names_to = "variable",
-    values_to = "value"
-  ) |>
-  filter(value == "@") |>
-  mutate(
-    year = str_extract(variable, "20(10|15|20|25)$")
-  ) |>
-  distinct(KEY, year) |>
-  count(year)
+### 数値型に変換したい変数を抽出
+numeric_vars <- names(df_tsunami) |>
+  str_subset(
+    "^(entities_total|size_|transplanter_|tractor_|combine_)"
+  )
 
 
-# 数値変換前のデータを保存
-df_tsunami_all_raw <- df_tsunami_all
 
 # 数値型に変換
-df_tsunami_all <- df_tsunami_all |>
+df_tsunami <- df_tsunami |>
   mutate(
     across(
-      all_of(entity_vars),
+      all_of(numeric_vars),
       ~ case_when(
         .x == "-" ~ 0,
         .x %in% c("X", "x", "...", "@") ~ NA_real_,
@@ -336,45 +254,12 @@ df_tsunami_all <- df_tsunami_all |>
     )
   )
 
-### 数値型になっているかチェック
-df_tsunami_all |>
-  summarise(
-    across(
-      all_of(entity_vars),
-      is.numeric
-    )
-  ) |>
-  pivot_longer(
-    everything(),
-    names_to = "variable",
-    values_to = "is_numeric"
-  ) |>
-  count(is_numeric)
 
 
-### 最終的な欠損セルの数を数える
-df_tsunami_all |>
-  summarise(
-    across(
-      all_of(entity_vars),
-      ~ sum(is.na(.x))
-    )
-  ) |>
-  pivot_longer(
-    everything(),
-    names_to = "variable",
-    values_to = "n_missing"
-  ) |>
-  mutate(
-    year = str_extract(variable, "20(10|15|20|25)$")
-  ) |>
-  group_by(year) |>
-  summarise(
-    total_missing = sum(n_missing),
-    .groups = "drop"
-  )
+# 普段の分析に使うファイルを生成---- 
+## preparation.Rの内容を更新したときだけ、下記のファイルを生成し直すこと。
 
-### 分析で使いやすいように名前変更（津波被災地のみのデータフレーム）
-df_tsunami <-  df_tsunami_all
-
-# ----
+saveRDS(
+  df_tsunami,
+  "data/processed/village_analysis.rds"
+)

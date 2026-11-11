@@ -4,13 +4,17 @@ output: html_document
 date: "2026-10-23"
 ---
 
+# データ読み込み
+
 ```{r}
-source(file = "preparation.R")
+df_tsunami <- readRDS(
+  "data/processed/village_analysis.rds"
+)
 ```
 
 
 ```{r}
-df_tsunami
+df_tsunami |> colnames()
 ```
 
 

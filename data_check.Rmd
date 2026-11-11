@@ -4,10 +4,12 @@ output: html_document
 date: "2026-11-09"
 ---
 
-# source
+# データ読み込み
 
 ```{r}
-source(file = "preparation.R")
+df_tsunami <- readRDS(
+  "data/processed/village_analysis.rds"
+)
 ```
 
 # 津波被災割合の妥当性チェック
