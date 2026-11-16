@@ -1,0 +1,121 @@
+---
+title: "kcity_analysis_replicate"
+output: html_document
+date: "2026-11-16"
+# 旧市区町村単位での分析（東北農経報告論文）を再現する
+---
+
+# データ読み込み
+
+```{r}
+df_tsunami <- readRDS(
+  "data/processed/village_analysis.rds"
+)
+```
+
+
+# 被災農地割合と20ha以上経営体割合
+
+```{r}
+# 20ha以上経営体割合変数をつくる
+df_tsunami_replicate <- df_tsunami |>
+  mutate(
+    size_20_plus_2010 = size_20_30_2010 +
+      size_30_50_2010 +
+      size_50_100_2010 +
+      size_100_150_2010, # size_150_plus_2010の区分は存在しないので削除
+    share_20_plus_2010 = size_20_plus_2010 / entities_total_2010,
+
+      size_20_plus_2015 = size_20_30_2015 +
+      size_30_50_2015 +
+      size_50_100_2015 +
+      size_100_150_2015, # size_150_plus_2015の区分は存在しないので削除
+    share_20_plus_2015 = size_20_plus_2015 / entities_total_2015,
+
+    size_20_plus_2020 = size_20_30_2020 +
+      size_30_50_2020 +
+      size_50_100_2020 +
+      size_100_150_2020 +
+      size_150_plus_2020,
+    share_20_plus_2020 = size_20_plus_2020 / entities_total_2020,
+    
+      size_20_plus_2025 = size_20_30_2025 +
+      size_30_50_2025 +
+      size_50_100_2025 +
+      size_100_150_2025 +
+      size_150_plus_2025,
+    share_20_plus_2025 = size_20_plus_2025 / entities_total_2025
+  )
+```
+
+
+```{r}
+df_tsunami_replicate |> 
+  ggplot(aes(x = tsunami_farmland_share, y = share_20_plus_2010)) +
+  geom_point() +
+  labs(
+    x = "津波被災農地割合",
+    y = "20ha以上経営体割合(2010年)"
+  )
+
+df_tsunami_replicate |> 
+  ggplot(aes(x = tsunami_farmland_share, y = share_20_plus_2015)) +
+  geom_point() +
+  labs(
+    x = "津波被災農地割合",
+    y = "20ha以上経営体割合(2015年)"
+  )
+
+df_tsunami_replicate |> 
+  ggplot(aes(x = tsunami_farmland_share, y = share_20_plus_2020)) +
+  geom_point() +
+  labs(
+    x = "津波被災農地割合",
+    y = "20ha以上経営体割合(2020年)"
+  )
+
+df_tsunami_replicate |> 
+  ggplot(aes(x = tsunami_farmland_share, y = share_20_plus_2025)) +
+  geom_point() +
+  labs(
+    x = "津波被災農地割合",
+    y = "20ha以上経営体割合(2025年)"
+  )
+```
+
+- 津波被災割合が大きいほど経営の大規模化が進む集落がみられる。
+- 一方で、大規模経営体（20ha以上）がゼロという集落も非常に多い。
+
+
+```{r}
+df_tsunami_replicate |>
+  summarise(
+    across(
+      matches("^size_20_plus_\\d{4}$"),
+      ~ mean(.x > 0, na.rm = TRUE)
+    )
+  )
+```
+
+全体としてみれば、20ha以上経営体が存在するの集落の割合は増加傾向。  
+
+```{r}
+df_tsunami_replicate |>
+  mutate(
+    damage_class = cut(
+      tsunami_farmland_share,
+      breaks = c(-Inf, 0, 0.25, 0.5, 0.75, 1),
+      labels = c("被災なし", "0-25%", "25-50%",
+                 "50-75%", "75-100%")
+    )
+  ) |>
+  group_by(damage_class) |>
+  summarise(
+    across(
+      matches("^size_20_plus_\\d{4}$"),
+      ~ mean(.x > 0, na.rm = TRUE)
+    )
+  )
+```
+津波被災農地割合が大きいと、20ha以上層経営体の存在集落割合が大きくなる傾向。
+

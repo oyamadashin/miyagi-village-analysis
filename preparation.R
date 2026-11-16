@@ -76,7 +76,7 @@ prepare_census <- function(data, year) {
     )
 }
 
-## 経営規模別経営体数データを結合----
+## 結合：経営規模別経営体数データ----
 
 
 ### 2010年経営規模別経営体数データ読み込み
@@ -135,7 +135,7 @@ df_tsunami <- df_tsunami |>
 
 
 
-## 農業用機械の所有経営体数と所有台数データを結合----
+## 結合：農業用機械の所有経営体数と所有台数データ----
 
 # 2010, 2015年センサス読み込み
 
@@ -169,7 +169,21 @@ df_tsunami <- df_tsunami |>
 
 
 
-# 変数名を変える----
+
+## 結合：政策関連変数----
+
+
+df_policy <- read_csv("data/processed/c1_c4_production_support_check.csv")
+
+df_policy <- df_policy |>
+  select(area_code, c_one, c_four, production_support)
+
+df_tsunami <- df_tsunami |>
+  left_join(df_policy, by = "area_code",
+            relationship = "many-to-one")
+
+
+# 変数名等の整理----
 
 
 ### 日本語名と英語名の対応表
@@ -253,6 +267,12 @@ df_tsunami <- df_tsunami |>
       )
     )
   )
+
+
+## 例外区域を除外----
+
+df_tsunami <- df_tsunami |>
+  filter(!kcity_code %in% c("-9", "99"))
 
 
 

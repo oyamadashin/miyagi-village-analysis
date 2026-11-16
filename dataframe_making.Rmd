@@ -449,7 +449,33 @@ df_tsunami <- df_tsunami2
 ```
 
 
-# 変数名を変える
+
+# 結合：政策関連変数
+
+```{r}
+df_policy <- read_csv("data/processed/c1_c4_production_support_check.csv")
+```
+
+
+```{r}
+df_policy <- df_policy |>
+  select(area_code, c_one, c_four, production_support)
+
+df_tsunami <- df_tsunami |>
+  left_join(df_policy, by = "area_code",
+            relationship = "many-to-one")
+```
+
+
+```{r}
+df_tsunami |>
+  anti_join(df_policy, by = "area_code") |>
+  distinct(area_code)
+```
+結合できなかった地域 → 0
+
+
+# 変数名等の整理
 
 
 ## 日本語名と英語名の対応表
@@ -671,5 +697,11 @@ df_tsunami |>
   )
 ```
 
+## 例外区域を除外
+
+```{r}
+df_tsunami <- df_tsunami |>
+  filter(!kcity_code %in% c("-9", "99"))
+```
 
 

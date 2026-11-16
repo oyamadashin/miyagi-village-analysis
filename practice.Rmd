@@ -14,7 +14,7 @@ df_tsunami <- readRDS(
 
 
 ```{r}
-df_tsunami |> colnames()
+df_tsunami_replicate$size_150_plus_2010
 ```
 
 

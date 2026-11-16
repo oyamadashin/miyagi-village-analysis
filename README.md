@@ -91,6 +91,8 @@ outputs/large/           大容量出力（Git対象外）
 
 - c1_c4_production_support_check.csv
   - 旧市区町村単位の分析をした際に作ったファイル。実施状況を目視で確認してダミー変数として入力している。
+  - コーディング詳細についてはgithubの[復興交付金事業データの扱い.txt](https://github.com/oyamadashin/miyagi-agricultural-recovery/blob/main/99_tips/復興交付金事業データの扱い.txt)参照
+  - ファイルはdataのprocessed内に置いてある。
 
 # 変数名
 
