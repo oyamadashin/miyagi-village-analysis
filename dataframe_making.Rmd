@@ -475,6 +475,142 @@ df_tsunami |>
 結合できなかった地域 → 0
 
 
+
+# 結合：組織形態別経営体数
+
+## 2010年センサスのみで結合可能性チェック
+
+データ読み込み
+
+```{r}
+farmtype_2010 <- read_excel(
+  "data/raw/census/SA1009_2010_2025_00.xlsx",
+  col_types = "text"
+)
+```
+
+
+宮城県の農業集落だけ抽出
+
+```{r}
+farmtype_2010_village <- farmtype_2010 |>
+  filter(
+    pref == "04",
+    rcom != "000"
+  )
+```
+
+
+
+KEYの重複確認→重複なし
+
+```{r}
+farmtype_2010_village |>
+  count(key) |>
+  filter(n > 1)
+```
+
+```{r}
+df_farmtype_2010 <- df_tsunami |>
+  left_join(
+    farmtype_2010_village,
+    by = c("KEY" = "key"),
+    relationship = "one-to-one"
+  )
+df_farmtype_2010
+```
+
+結合成功が確認されたので、改めて2010～2025年度センサスデータ結合作業にとりかかろう。
+
+## 2010-2025年センサス読み込み
+```{r}
+farmtype_2010 <- read_excel(
+  "data/raw/census/SA1009_2010_2025_00.xlsx",
+  col_types = "text"
+)
+
+farmtype_2015 <- read_excel(
+  "data/raw/census/SA1009_2015_2025_00.xlsx",
+  col_types = "text"
+)
+
+farmtype_2020 <- read_excel(
+  "data/raw/census/SA1009_2020_2025_00.xlsx",
+  col_types = "text"
+)
+
+farmtype_2025 <- read_excel(
+  "data/raw/census/SA1009_2025_2025_00.xlsx",
+  col_types = "text"
+)
+```
+
+
+各規模階層の経営体数変数名が重複しないよう年次をつける
+
+```{r}
+farmtype_2010_value_year <- prepare_census(farmtype_2010, 2010)
+farmtype_2015_value_year <- prepare_census(farmtype_2015, 2015)
+farmtype_2020_value_year <- prepare_census(farmtype_2020, 2020)
+farmtype_2025_value_year <- prepare_census(farmtype_2025, 2025)
+```
+
+
+
+## 結合
+```{r}
+df_tsunami_all <- df_tsunami |>
+  left_join(farmtype_2010_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") |>
+  left_join(farmtype_2015_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") |>
+  left_join(farmtype_2020_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") |>
+  left_join(farmtype_2025_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one")
+```
+
+
+
+
+結合して行数が変わっていないことをチェック→変わっていない
+```{r}
+nrow(df_tsunami)
+nrow(df_tsunami_all)
+```
+
+
+
+各年次で結合できないKEYはないか→ない
+```{r}
+list(
+  "2010" = farmtype_2010,
+  "2015" = farmtype_2015,
+  "2020" = farmtype_2020,
+  "2025" = farmtype_2025
+) |>
+  purrr::map_int(
+    ~ anti_join(
+      df_tsunami,
+      .x,
+      by = c("KEY" = "key")
+    ) |>
+      nrow()
+  )
+```
+
+データフレーム名を付け直す。
+```{r}
+df_tsunami <- df_tsunami_all
+```
+
+
+
+
 # 変数名等の整理
 
 
@@ -482,7 +618,8 @@ df_tsunami |>
 
 ```{r}
 name_map <- c(
-  "計" = "entities_total", # ここから、規模別経営体数関連変数
+  # 規模別経営体数関連変数
+  "計" = "entities_total",
   "経営耕地なし" = "size_none",
   "0.3ha未満" = "size_under_0_3",
   "0.3～0.5" = "size_0_3_0_5",
@@ -499,14 +636,36 @@ name_map <- c(
   "100～150" = "size_100_150",
   "100.0～150.0" = "size_100_150",
   "150ha以上" = "size_150_plus",
-  "動力田植機_経営体数" = "transplanter_entities", #ここから、機械保有関連変数
+
+  # 機械所有関連変数
+  "動力田植機_経営体数" = "transplanter_entities",
   "動力田植機_台数" = "transplanter_units",
   "トラクター_経営体数" = "tractor_entities",
-  "トラクター_台数"= "tractor_units",
+  "トラクター_台数" = "tractor_units",
   "コンバイン_経営体数" = "combine_entities",
-  "コンバイン_台数"= "combine_units"
+  "コンバイン_台数" = "combine_units",
+
+  # 組織形態別経営体数関連変数
+  "合計" = "type_total",
+  "法人化している_計" = "type_corporate",
+  "法人化している_農事組合法人" = "type_agricultural_corporation",
+  "法人化している_会社_小計" = "type_company",
+  "法人化している_会社_株式会社" = "type_stock_company",
+  "法人化している_会社_合名・合資会社" = "type_partnership",
+  "法人化している_会社_合同会社" = "type_llc",
+  "法人化している_会社_相互会社" = "type_mutual_company",
+  "法人化している_各種団体_小計" = "type_association",
+  "法人化している_各種団体_農協" = "type_agricultural_coop",
+  "法人化している_各種団体_森林組合" = "type_forestry_coop",
+  "法人化している_各種団体_その他の各種団体" = "type_other_association",
+  "法人化している_その他の法人" = "type_other_corporate",
+  "地方公共団体・財産区" = "type_public",
+  "法人化していない_計" = "type_noncorporate",
+  "法人化していない_個人経営体" = "type_individual",
+  "法人化していない_任意団体" = "type_voluntary_group"
 )
 ```
+
 
 
 変数名対応表をCSVとして保存
@@ -558,6 +717,25 @@ tibble(
   filter(old_name != new_name)
 ```
 
+entities_totalとtype_totalは値が同じか　→　同じ
+
+```{r}
+years <- c(2010, 2015, 2020, 2025)
+
+sapply(years, function(y) {
+  identical(
+    df_tsunami[[paste0("entities_total_", y)]],
+    df_tsunami[[paste0("type_total_", y)]]
+  )
+})
+```
+
+type_totalの方が不要なので削除
+
+```{r}
+df_tsunami <- df_tsunami |> 
+  select(-starts_with("type_total_"))
+```
 
 
 変換された変数の数を年次別に確認
@@ -580,7 +758,7 @@ tibble(
 ```{r}
 numeric_vars <- names(df_tsunami) |>
   str_subset(
-    "^(entities_total|size_|transplanter_|tractor_|combine_)"
+    "^(entities_total|size_|transplanter_|tractor_|combine_|type_)"
   )
 ```
 
@@ -605,7 +783,9 @@ df_tsunami |>
 
 
 
-@は時点間で接続不能のデータ。→該当5つだ。分析にはあまり影響なし。
+@は時点間で接続不能のデータ。→該当180
+
+
 
 
 ```{r}
@@ -624,7 +804,7 @@ df_tsunami |>
   count(year)
 ```
 
-
+ただ、内訳としては、2010年の5つのKEYの地域でのみ接続不能が発生していることがわかる（変数がすごく多いからさっきは180という大きな値になっていた）。
 
 
 数値変換前のデータを保存

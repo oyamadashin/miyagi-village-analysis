@@ -2,6 +2,9 @@
 library(tidyverse)
 library(readxl)
 
+# ロバスト標準誤差系のパッケージ
+library(sandwich)
+library(lmtest)
 
 
 # 津波割合変数をつくる----
@@ -183,12 +186,62 @@ df_tsunami <- df_tsunami |>
             relationship = "many-to-one")
 
 
+## 結合：組織形態別経営体数----
+
+# 2010-2025年センサス読み込み
+farmtype_2010 <- read_excel(
+  "data/raw/census/SA1009_2010_2025_00.xlsx",
+  col_types = "text"
+)
+
+farmtype_2015 <- read_excel(
+  "data/raw/census/SA1009_2015_2025_00.xlsx",
+  col_types = "text"
+)
+
+farmtype_2020 <- read_excel(
+  "data/raw/census/SA1009_2020_2025_00.xlsx",
+  col_types = "text"
+)
+
+farmtype_2025 <- read_excel(
+  "data/raw/census/SA1009_2025_2025_00.xlsx",
+  col_types = "text"
+)
+
+
+# 各規模階層の経営体数変数名が重複しないよう年次をつける
+farmtype_2010_value_year <- prepare_census(farmtype_2010, 2010)
+farmtype_2015_value_year <- prepare_census(farmtype_2015, 2015)
+farmtype_2020_value_year <- prepare_census(farmtype_2020, 2020)
+farmtype_2025_value_year <- prepare_census(farmtype_2025, 2025)
+
+
+
+# 結合
+df_tsunami <- df_tsunami |>
+  left_join(farmtype_2010_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") |>
+  left_join(farmtype_2015_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") |>
+  left_join(farmtype_2020_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") |>
+  left_join(farmtype_2025_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one")
+
+
+
 # 変数名等の整理----
 
 
 ### 日本語名と英語名の対応表
 name_map <- c(
-  "計" = "entities_total", # ここから、規模別経営体数関連変数
+  # 規模別経営体数関連変数
+  "計" = "entities_total",
   "経営耕地なし" = "size_none",
   "0.3ha未満" = "size_under_0_3",
   "0.3～0.5" = "size_0_3_0_5",
@@ -205,12 +258,33 @@ name_map <- c(
   "100～150" = "size_100_150",
   "100.0～150.0" = "size_100_150",
   "150ha以上" = "size_150_plus",
-  "動力田植機_経営体数" = "transplanter_entities", #ここから、機械保有関連変数
+  
+  # 機械所有関連変数
+  "動力田植機_経営体数" = "transplanter_entities",
   "動力田植機_台数" = "transplanter_units",
   "トラクター_経営体数" = "tractor_entities",
-  "トラクター_台数"= "tractor_units",
+  "トラクター_台数" = "tractor_units",
   "コンバイン_経営体数" = "combine_entities",
-  "コンバイン_台数"= "combine_units"
+  "コンバイン_台数" = "combine_units",
+  
+  # 組織形態別経営体数関連変数
+  "合計" = "type_total",
+  "法人化している_計" = "type_corporate",
+  "法人化している_農事組合法人" = "type_agricultural_corporation",
+  "法人化している_会社_小計" = "type_company",
+  "法人化している_会社_株式会社" = "type_stock_company",
+  "法人化している_会社_合名・合資会社" = "type_partnership",
+  "法人化している_会社_合同会社" = "type_llc",
+  "法人化している_会社_相互会社" = "type_mutual_company",
+  "法人化している_各種団体_小計" = "type_association",
+  "法人化している_各種団体_農協" = "type_agricultural_coop",
+  "法人化している_各種団体_森林組合" = "type_forestry_coop",
+  "法人化している_各種団体_その他の各種団体" = "type_other_association",
+  "法人化している_その他の法人" = "type_other_corporate",
+  "地方公共団体・財産区" = "type_public",
+  "法人化していない_計" = "type_noncorporate",
+  "法人化していない_個人経営体" = "type_individual",
+  "法人化していない_任意団体" = "type_voluntary_group"
 )
 
 # 変数名対応表をCSVとして保存
@@ -221,6 +295,10 @@ name_map |>
   ) |>
   write_excel_csv("data/processed/variable_name_map.csv")
 
+
+# 総経営体数type_totalに該当する変数がすでにあるので削除
+df_tsunami <- df_tsunami |> 
+  select(-starts_with("type_total_"))
 
 
 ### 4時点の変数名を一括変更
@@ -250,7 +328,7 @@ names(df_tsunami) <- new_names
 ### 数値型に変換したい変数を抽出
 numeric_vars <- names(df_tsunami) |>
   str_subset(
-    "^(entities_total|size_|transplanter_|tractor_|combine_)"
+    "^(entities_total|size_|transplanter_|tractor_|combine_|type_)"
   )
 
 

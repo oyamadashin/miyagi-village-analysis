@@ -14,8 +14,10 @@ df_tsunami <- readRDS(
 ```
 
 
-# 被災農地割合と20ha以上経営体割合
+# 変数作成
 
+
+## 20ha以上経営体割合変数
 ```{r}
 # 20ha以上経営体割合変数をつくる
 df_tsunami_replicate <- df_tsunami |>
@@ -47,6 +49,87 @@ df_tsunami_replicate <- df_tsunami |>
     share_20_plus_2025 = size_20_plus_2025 / entities_total_2025
   )
 ```
+
+
+## 残存率変数
+
+```{r}
+df_tsunami_replicate <- df_tsunami_replicate |>
+  mutate(
+    individual_retention_2015 =
+      type_individual_2015 / na_if(type_individual_2010, 0),
+    individual_retention_2020 =
+      type_individual_2020 / na_if(type_individual_2010, 0),
+    individual_retention_2025 =
+      type_individual_2025 / na_if(type_individual_2010, 0)
+  )
+```
+
+## 2010年時点機械所有経営体割合
+
+
+### 機械所有経営体割合
+※個人経営体だけでなく組織経営体も含めて求めた割合であることに注意。
+
+```{r}
+
+df_tsunami_replicate <- df_tsunami_replicate |>
+  mutate(
+    combine_share_2010 =
+      combine_entities_2010 / na_if(entities_total_2010, 0),
+    tractor_share_2010 =
+      tractor_entities_2010 / na_if(entities_total_2010, 0),
+    transplanter_share_2010 =
+      transplanter_entities_2010 / na_if(entities_total_2010, 0)
+  )
+```
+
+
+### 機械所有個人経営体割合（下限値）
+
+```{r}
+df_tsunami_replicate <- df_tsunami_replicate |>
+  mutate(
+    # 非個人経営体数
+    type_nonindividual_2010 =
+      entities_total_2010 - type_individual_2010,
+
+    # 個人経営体による機械所有割合（下限推計）
+    combine_share_lower_2010 =
+      pmax(0, combine_entities_2010 - type_nonindividual_2010) /
+      na_if(type_individual_2010, 0),
+
+    tractor_share_lower_2010 =
+      pmax(0, tractor_entities_2010 - type_nonindividual_2010) /
+      na_if(type_individual_2010, 0),
+
+    transplanter_share_lower_2010 =
+      pmax(0, transplanter_entities_2010 - type_nonindividual_2010) /
+      na_if(type_individual_2010, 0)
+  )
+```
+
+### 機械所有個人経営体割合（上限値）
+
+```{r}
+df_tsunami_replicate <- df_tsunami_replicate |>
+  mutate(
+    combine_share_upper_2010 =
+      pmin(combine_entities_2010, type_individual_2010) /
+      na_if(type_individual_2010, 0),
+
+    tractor_share_upper_2010 =
+      pmin(tractor_entities_2010, type_individual_2010) /
+      na_if(type_individual_2010, 0),
+
+    transplanter_share_upper_2010 =
+      pmin(transplanter_entities_2010, type_individual_2010) /
+      na_if(type_individual_2010, 0)
+  )
+```
+
+
+# 被災農地割合と20ha以上経営体割合
 
 
 ```{r}
@@ -119,3 +202,735 @@ df_tsunami_replicate |>
 ```
 津波被災農地割合が大きいと、20ha以上層経営体の存在集落割合が大きくなる傾向。
 
+
+
+
+
+# 分析変数の記述統計量
+
+```{r}
+# 分析再現に使う変数の指定
+analysis_vars <- c(
+  "individual_retention_2015",
+  "individual_retention_2020",
+  "individual_retention_2025",
+  "tsunami_farmland_share",
+  "c_one",
+  "c_four",
+  "production_support",
+  "combine_share_2010",
+  "tractor_share_2010",
+  "transplanter_share_2010",
+  "combine_share_lower_2010",
+  "tractor_share_lower_2010",
+  "transplanter_share_lower_2010",
+  "combine_share_upper_2010",
+  "tractor_share_upper_2010",
+  "transplanter_share_upper_2010"
+)
+```
+
+```{r}
+df_desc <- df_tsunami_replicate |>
+  select(all_of(analysis_vars)) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "variable",
+    values_to = "value"
+  ) |>
+  group_by(variable) |>
+  summarise(
+    N = sum(!is.na(value)),
+    mean = mean(value, na.rm = TRUE),
+    sd = sd(value, na.rm = TRUE),
+    min = min(value, na.rm = TRUE),
+    max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(match(variable, analysis_vars))
+
+df_desc
+```
+- 平均値は旧市区町村レベルとあまり変わらない。
+- 一方で、標準偏差は集落レベルの方がやや大きい（とくに残存率で顕著）
+- 機械所有割合の下限、上限には大きなちがいはない。
+- 残存率が異様に大きい地域があるようだ。
+
+```{r}
+df_tsunami_replicate |>
+  filter(individual_retention_2015 > 1) |>
+  select(
+    area_code,
+    village_code,
+    type_individual_2010,
+    type_individual_2015,
+    type_individual_2020,
+    type_individual_2025,
+    individual_retention_2015,
+    tsunami_farmland_share
+  ) |>
+  arrange(desc(individual_retention_2015))
+```
+個人経営体が4しかなかった地域で、震災後に18に増える、というケースは珍しいけれどあり得なくはない。分子が非常に小さい地域だと残存率が大きくなることがある、ということだろう。
+
+
+```{r}
+df_tsunami_replicate |>
+  ggplot(
+    aes(
+      x = type_individual_2010,
+      y = individual_retention_2015
+    )
+  ) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  labs(
+    x = "個人経営体数（2010年）",
+    y = "個人経営体残存率（2015/2010）"
+  )
+```
+明らかに、個人経営体数が少ない地域で高い残存率が発生する傾向がみられる。
+
+
+# OLS回帰
+
+## M1
+
+```{r}
+m1 <- lm(
+  individual_retention_2015 ~ tsunami_farmland_share,
+  data = df_tsunami_replicate
+)
+
+
+# HC3ロバスト標準誤差(不均一分散対策)
+coeftest(m1, vcov. = vcovHC(m1, type = "HC3"))
+
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+# クラスターロバスト標準誤差
+coeftest(
+  m1,
+  vcov. = vcovCL(
+    m1,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+
+m1 |> summary()
+```
+
+係数は有意だけど、旧市区町村分析に比べると小さい（負であることは変わらない）。
+決定係数が非常に小さくなっている。小規模集落の影響が出ているという面もありそう。
+
+
+## M2
+
+```{r}
+# M2：津波被災＋政策変数
+m2 <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    c_one +
+    c_four +
+    production_support,
+  data = df_tsunami_replicate
+)
+
+
+# HC3ロバスト標準誤差(不均一分散対策)
+coeftest(m2, vcov. = vcovHC(m2, type = "HC3"))
+
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share),
+    !is.na(c_one),
+    !is.na(c_four),
+    !is.na(production_support)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+# クラスターロバスト標準誤差
+coeftest(
+  m2,
+  vcov. = vcovCL(
+    m2,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+
+m2 |> summary()
+car::vif(m2)
+```
+
+- 係数は旧市区町村分析とかなり整合している。
+- ただし、決定係数はやはりかなり小さい。
+- HC3ロバストをクラスターロバストに変更すると、C4の標準誤差が大きくなる
+　→　旧市区町村内の集落単位での変動が重要。
+　
+　
+## M3
+
+```{r}
+# M3：津波被災＋機械所有
+m3 <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    combine_share_lower_2010 +
+    tractor_share_lower_2010 +
+    transplanter_share_lower_2010,
+  data = df_tsunami_replicate
+)
+
+# HC3ロバスト標準誤差(不均一分散対策)
+coeftest(m3, vcov. = vcovHC(m3, type = "HC3"))
+
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share),
+    !is.na(combine_share_lower_2010),
+    !is.na(tractor_share_lower_2010),
+    !is.na(transplanter_share_lower_2010)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+# クラスターロバスト標準誤差
+coeftest(
+  m3,
+  vcov. = vcovCL(
+    m3,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+
+m3 |> summary()
+car::vif(m3)
+```
+- 旧市区町村レベル分析と係数はおおむね同傾向（田植機が有意になっているのはちがう）
+- 決定係数は相変わらず小さい
+
+### 田植機の影響分析
+
+#### 田植機のみモデル
+```{r}
+m3_transplanter <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    transplanter_share_lower_2010,
+  data = df_tsunami_replicate
+)
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share),
+    !is.na(transplanter_share_lower_2010)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+# クラスターロバスト標準誤差
+coeftest(
+  m3_transplanter,
+  vcov. = vcovCL(
+    m3_transplanter,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+summary(m3_transplanter)
+```
+
+田植機だけだと有意にならない（負にはなる）
+
+
+#### 田植機+トラクターモデル
+```{r}
+m3_transplanter_tractor <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    tractor_share_lower_2010 +
+    transplanter_share_lower_2010,
+  data = df_tsunami_replicate
+)
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share),
+    !is.na(tractor_share_lower_2010),
+    !is.na(transplanter_share_lower_2010)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+# クラスターロバスト標準誤差
+coeftest(
+  m3_transplanter_tractor,
+  vcov. = vcovCL(
+    m3_transplanter_tractor,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+summary(m3_transplanter_tractor)
+```
+
+トラクターを入れても田植機は有意にならない。
+
+
+#### 田植機+コンバインモデル
+```{r}
+m3_transplanter_combine <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    combine_share_lower_2010 +
+    transplanter_share_lower_2010,
+  data = df_tsunami_replicate
+)
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share),
+    !is.na(combine_share_lower_2010),
+    !is.na(transplanter_share_lower_2010)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+# クラスターロバスト標準誤差
+coeftest(
+  m3_transplanter_combine,
+  vcov. = vcovCL(
+    m3_transplanter_combine,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+summary(m3_transplanter_combine)
+```
+
+コンバインと一緒に入れたときだけ有意になるようだ。
+
+
+### コンバインと田植機のギャップによる影響
+
+コンバインに比べ田植機所有割合が相対的に大きいことによる影響をみてみる。
+
+
+```{r}
+df_tsunami_replicate <- df_tsunami_replicate |>
+  mutate(
+    machinery_gap_2010 =
+      transplanter_share_lower_2010 -
+      combine_share_lower_2010
+  )
+
+m_gap <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    machinery_gap_2010,
+  data = df_tsunami_replicate
+)
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share),
+    !is.na(combine_share_lower_2010),
+    !is.na(transplanter_share_lower_2010)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+# クラスターロバスト標準誤差
+coeftest(
+  m_gap,
+  vcov. = vcovCL(
+    m_gap,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+summary(m_gap)
+```
+
+コンバインに比べ田植機所有割合が相対的に大きい集落の方が、個人経営体残存率が低くなる傾向。
+
+
+田植機所有割合の大きさの違いを考慮して、ギャップの影響を見てみよう。
+
+```{r}
+m_gap2 <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    machinery_gap_2010 +
+    transplanter_share_lower_2010,
+  data = df_tsunami_replicate
+)
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share),
+    !is.na(combine_share_lower_2010),
+    !is.na(transplanter_share_lower_2010)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+coeftest(
+  m_gap2,
+  vcov. = vcovCL(
+    m_gap2,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+
+summary(m_gap2)
+car::vif(m_gap2)
+```
+やっぱり影響しているのは田植機所有割合ではなくコンバインと田植機のギャップの方みたいだ。（田植機単体の方は係数が正に変わっている。これは理解しやすい傾向だ）
+
+##### memo(仮説)
+コンバインを共同使用する傾向の強い地域と、コンバインを自前で用意する個人主義的傾向の強い地域がある、という風に解釈できないだろうか？　前者はもともと協業志向が強いため、震災後は多くの個人経営体が組織経営体に参加するようになって、結果として残存率が低くなったのかもしれない。
+
+→　ギャップ変数と協業志向関連の変数の関連性を見てみるとよい。
+
+（ところで、これがそもそも津波被災地限定の現象なのかそれとも一般的にみられる現象なのかは検証しておいた方がいいだろう。）
+
+## M4
+
+```{r}
+# M4：津波被災＋機械所有 + 政策変数
+m4 <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    c_one +
+    c_four +
+    production_support +
+    combine_share_lower_2010 +
+    tractor_share_lower_2010 +
+    transplanter_share_lower_2010,
+  data = df_tsunami_replicate
+)
+
+# HC3ロバスト標準誤差(不均一分散対策)
+coeftest(m4, vcov. = vcovHC(m4, type = "HC3"))
+
+
+# 実際に分析に使用された旧市区町村数
+G <- df_tsunami_replicate |>
+  filter(
+    !is.na(individual_retention_2015),
+    !is.na(tsunami_farmland_share),
+    !is.na(c_one),
+    !is.na(c_four),
+    !is.na(production_support),
+    !is.na(combine_share_lower_2010),
+    !is.na(tractor_share_lower_2010),
+    !is.na(transplanter_share_lower_2010)
+  ) |>
+  summarise(G = n_distinct(area_code)) |>
+  pull(G)
+
+# クラスターロバスト標準誤差
+coeftest(
+  m4,
+  vcov. = vcovCL(
+    m4,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+
+m4 |> summary()
+car::vif(m4)
+```
+やはり田植機と決定係数以外は旧市区町村分析と似た傾向。
+
+### M4_gap（基本モデル）
+
+```{r}
+m4_gap <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    c_one +
+    c_four +
+    production_support +
+    machinery_gap_2010 +
+    tractor_share_lower_2010 +
+    transplanter_share_lower_2010,
+  data = df_tsunami_replicate
+)
+
+coeftest(
+  m4_gap,
+  vcov. = vcovCL(
+    m4_gap,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G - 1
+)
+
+summary(m4_gap)
+car::vif(m4_gap)
+```
+やはりギャップが重要。
+→　これを基本モデルにしよう。
+
+
+
+# 頑健性チェック
+
+## 準備
+
+```{r}
+cluster_test <- function(model) {
+
+  cluster <- expand.model.frame(
+    model,
+    ~ area_code
+  )$area_code
+
+  G <- dplyr::n_distinct(cluster)
+
+  lmtest::coeftest(
+    model,
+    vcov. = sandwich::vcovCL(
+      model,
+      cluster = cluster,
+      type = "HC1"
+    ),
+    df = G - 1
+  )
+}
+
+f_gap <- formula(m4_gap)
+```
+
+
+## M5
+
+```{r}
+m5_gap <- lm(
+  f_gap,
+  data = df_tsunami_replicate,
+  weights = type_individual_2010
+)
+
+cluster_test(m5_gap)
+summary(m5_gap)
+```
+
+## M6(TODO)
+
+```{r}
+
+```
+
+
+## M7(TODO)
+
+```{r}
+df_tsunami_replicate |>
+  summarise(
+    n_zero = sum(
+      individual_retention_2015 == 0,
+      na.rm = TRUE
+    )
+  )
+```
+
+→　残存率ゼロの集落があるので、対策をしてから分析する必要
+
+
+## M8：2020年残存率
+
+```{r}
+m8_gap <- lm(
+  update(
+    f_gap,
+    individual_retention_2020 ~ .
+  ),
+  data = df_tsunami_replicate
+)
+
+cluster_test(m8_gap)
+summary(m8_gap)
+```
+
+
+## M9：2025年残存率
+
+```{r}
+m9_gap <- lm(
+  update(
+    f_gap,
+    individual_retention_2025 ~ .
+  ),
+  data = df_tsunami_replicate
+)
+
+cluster_test(m9_gap)
+summary(m9_gap)
+```
+## M10：外れ値除外モデル
+
+```{r}
+m10_gap <- lm(
+  f_gap,
+  data = df_tsunami_replicate |>
+    filter(individual_retention_2015 < 4.5)
+)
+
+cluster_test(m10_gap)
+summary(m10_gap)
+```
+
+## M11：旧市区町村固定効果モデル
+
+```{r}
+m11_gap <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    machinery_gap_2010 +
+    tractor_share_lower_2010 +
+    transplanter_share_lower_2010 +
+    factor(area_code),
+  data = df_tsunami_replicate
+)
+
+cluster_test(m11_gap)
+summary(m11_gap)
+```
+### Within-Betweenモデルの推定
+
+```{r}
+within_vars <- c(
+  "machinery_gap_2010",
+  "tsunami_farmland_share",
+  "tractor_share_lower_2010",
+  "transplanter_share_lower_2010"
+)
+
+df_wb <- df_tsunami_replicate |>
+  tidyr::drop_na(
+    individual_retention_2015,
+    area_code,
+    c_one,
+    c_four,
+    production_support,
+    all_of(within_vars)
+  ) |>
+  group_by(area_code) |>
+  mutate(
+    across(
+      all_of(within_vars),
+      list(
+        between = ~ mean(.x),
+        within = ~ .x - mean(.x)
+      ),
+      .names = "{.col}_{.fn}"
+    )
+  ) |>
+  ungroup()
+
+m_wb <- lm(
+  individual_retention_2015 ~
+    machinery_gap_2010_within +
+    machinery_gap_2010_between +
+    tsunami_farmland_share_within +
+    tsunami_farmland_share_between +
+    tractor_share_lower_2010_within +
+    tractor_share_lower_2010_between +
+    transplanter_share_lower_2010_within +
+    transplanter_share_lower_2010_between +
+    c_one +
+    c_four +
+    production_support,
+  data = df_wb
+)
+
+cluster_test(m_wb)
+summary(m_wb)
+
+# Between係数とWithin係数の差の検定
+vcov_wb <- vcovCL(
+  m_wb,
+  cluster = ~ area_code,
+  type = "HC1"
+)
+
+G_wb <- n_distinct(df_wb$area_code)
+
+car::linearHypothesis(
+  m_wb,
+  "machinery_gap_2010_between = machinery_gap_2010_within",
+  vcov. = vcov_wb,
+  test = "F",
+  error.df = G_wb - 1
+)
+
+car::linearHypothesis(
+  m_wb,
+  "tsunami_farmland_share_between = tsunami_farmland_share_within",
+  vcov. = vcov_wb,
+  test = "F",
+  error.df = G_wb - 1
+)
+```
+機械所有ギャップと個人経営体残存率との負の関係は、同一旧市区町村内の集落間の違いよりも、旧市区町村間の違いとして強く現れている
+→　機械所有の影響は集落を越えるのでは？（コンバインを集落を越えて共用しているとか。他集落の農地を耕作している、とかもありそう）
+
+ちなみに、津波については集落間の違いとして明確に出ている。
+
+
+#### memo(仮説)
+
+七ヶ浜の事例を別な方向性で解釈する道もありそう。機械が充足していたから法人に参加しない個人志向農家が出てきた、というよりも、もともと彼らが個人志向だから、機械を充足させる傾向が強かった、ということではないか。
