@@ -4,6 +4,17 @@ output: html_document
 date: "2026-11-09"
 ---
 
+# パッケージ読み込み
+
+```{r}
+library(tidyverse)
+library(readxl)
+
+
+library(sandwich)
+library(lmtest)
+```
+
 # データ読み込み
 
 ```{r}

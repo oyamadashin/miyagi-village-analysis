@@ -5,6 +5,18 @@ date: "2026-11-16"
 # 旧市区町村単位での分析（東北農経報告論文）を再現する
 ---
 
+# パッケージ読み込み
+
+```{r}
+library(tidyverse)
+library(readxl)
+
+
+library(sandwich)
+library(lmtest)
+```
+
+
 # データ読み込み
 
 ```{r}
@@ -726,16 +738,19 @@ car::vif(m4_gap)
 
 
 
+
+
 # 頑健性チェック
 
 ## 準備
 
 ```{r}
+# クラスターロバスト標準誤差を求めるための関数をつくる
 cluster_test <- function(model) {
 
   cluster <- expand.model.frame(
     model,
-    ~ area_code
+    ~ area_code # ここで、旧市区町村をクラスターとして指定している
   )$area_code
 
   G <- dplyr::n_distinct(cluster)
@@ -755,7 +770,7 @@ f_gap <- formula(m4_gap)
 ```
 
 
-## M5
+## M5 WLS（重み付き最小二乗法）
 
 ```{r}
 m5_gap <- lm(
@@ -764,9 +779,69 @@ m5_gap <- lm(
   weights = type_individual_2010
 )
 
-cluster_test(m5_gap)
-summary(m5_gap)
+cluster_test(m5_gap) # クラスターロバスト標準誤差を使った検定結果
+summary(m5_gap)$adj.r.squared 
+# 上のコードでは決定係数を出してくれないのでsummary()を使う
+nobs(m5_gap) # サンプル数
 ```
+
+- 決定係数はかなり改善している。
+- 変数の符号・有意傾向は変わらない。
+
+```{r}
+df_residual <- data.frame(
+  weight = model.frame(m5_gap)[["(weights)"]],
+  residual_ols = residuals(m4_gap),
+  residual_wls = residuals(m5_gap)
+)
+
+ggplot(df_residual,
+       aes(x = weight, y = residual_ols)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_log10() +
+  labs(
+    x = "2010年個人経営体数",
+    y = "OLSの残差"
+  )
+
+
+```
+個人経営体数が少ないほど残差のばらつきが大きい→WLSを実行すべき根拠
+
+
+```{r}
+df_residual <- df_residual |>
+  mutate(
+    weighted_residual_wls = sqrt(weight) * residual_wls
+  )
+
+ggplot(df_residual,
+       aes(x = weight, y = weighted_residual_wls)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_log10() +
+  labs(
+    x = "2010年個人経営体数",
+    y = "WLSの重み付き残差"
+  )
+```
+WLSにより残差ばらつきはかなり改善されている。
+
+
+```{r}
+df_residual |>
+  arrange(desc(abs(residual_ols))) |>
+  head(10)
+
+
+df_tsunami[334, ]
+# KEY0436101014。総経営体数が2010年4→2015年18に増えた地域。
+# 残存率は18/4 = 4.5　明らかな外れ値なのでいずれ外した方がいいかも。
+
+```
+
+
 
 ## M6(TODO)
 
