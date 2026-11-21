@@ -843,27 +843,263 @@ df_tsunami[334, ]
 
 
 
-## M6(TODO)
+## M6(小規模地域除外)
 
+まず、小規模地域を除外したデータフレームをつくる。
 ```{r}
+# m5_gapで使用された行番号を抽出
+used_rows <- as.integer(rownames(model.frame(m5_gap)))
 
+# 元のデータフレームから対応する行番号のデータを抽出
+df_m6 <- df_tsunami_replicate[used_rows, ]
+
+# 2010年個人経営体数の第1四分位数
+q1 <- quantile(
+  df_m6$type_individual_2010,
+  prob = 0.25,
+  na.rm = TRUE
+)
+
+q1 # 第1四分位数=10
+
+df_m6 <- df_m6 |> filter(type_individual_2010 >= q1)
+
+nrow(df_m6) # サンプル数は234となった
 ```
 
+では、普通にOLS回帰。
+```{r}
+# 分析に使うデータのクラスター数を求める
+G_m6 <- n_distinct(
+  df_m6$area_code
+)
 
-## M7(TODO)
+
+# 普通の回帰
+m6_gap <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    c_one +
+    c_four +
+    production_support +
+    machinery_gap_2010 +
+    tractor_share_lower_2010 +
+    transplanter_share_lower_2010,
+  data = df_m6
+)
+
+
+# クラスターロバストを使った回帰
+coeftest(
+  m6_gap,
+  vcov. = vcovCL(
+    m6_gap,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G_m6 - 1
+)
+
+summary(m6_gap)
+car::vif(m6_gap)
+
+
+# あらかじめ作ったデータフレームと回帰に使われたデータでサンプル数は同じか？　→　同じ
+nrow(df_m6)
+nobs(m6_gap)
+```
+
+- 決定係数はかなり改善している。
+- 変数の符号・有意傾向は変わらない。
+- ただし、機械ギャップの係数絶対値はやや小さくなってきている。
+
+## M7(目的変数の対数化)
 
 ```{r}
-df_tsunami_replicate |>
-  summarise(
-    n_zero = sum(
-      individual_retention_2015 == 0,
-      na.rm = TRUE
-    )
+# M4で使ったサンプルの行番号抽出
+used_rows <- as.integer(rownames(model.frame(m4_gap)))
+
+
+# 残存率=0の地域を取り除いてデータフレームを作る（0だと対数化できないので）
+df_m7 <- df_tsunami_replicate[used_rows, ] |> 
+  filter(individual_retention_2015 > 0)
+
+# 残存率を対数変換した変数を作る
+df_m7 <- df_m7 |> 
+  mutate(
+    log_individual_retention_2015 =
+      log(individual_retention_2015)
   )
 ```
 
-→　残存率ゼロの集落があるので、対策をしてから分析する必要
 
+```{r}
+# 分析に使うデータのクラスター数を求める
+G_m7 <- n_distinct(
+  df_m7$area_code
+)
+
+
+# 普通の回帰
+m7_gap <- lm(
+  log_individual_retention_2015 ~
+    tsunami_farmland_share +
+    c_one +
+    c_four +
+    production_support +
+    machinery_gap_2010 +
+    tractor_share_lower_2010 +
+    transplanter_share_lower_2010,
+  data = df_m7
+)
+
+
+# クラスターロバストを使った回帰
+coeftest(
+  m7_gap,
+  vcov. = vcovCL(
+    m7_gap,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G_m7 - 1
+)
+
+summary(m7_gap)
+car::vif(m7_gap)
+
+# あらかじめ作ったデータフレームと回帰に使われたデータでサンプル数は同じか？　→　同じ
+nrow(df_m7)
+nobs(m7_gap)
+```
+
+- C4の有意性が弱まっている。
+- また、決定係数が小さくなった（対数だと残存率の小さい地域のばらつきによる影響が強く出るので、一概にモデルが悪くなったというわけでもない）。
+
+```{r}
+m7_level <- lm(
+  individual_retention_2015 ~
+    tsunami_farmland_share +
+    c_one +
+    c_four +
+    production_support +
+    machinery_gap_2010 +
+    tractor_share_lower_2010 +
+    transplanter_share_lower_2010,
+  data = df_m7
+)
+
+coeftest(
+  m7_level,
+  vcov. = vcovCL(
+    m7_level,
+    cluster = ~ area_code,
+    type = "HC1"
+  ),
+  df = G_m7 - 1
+)
+```
+
+- 対数変換をしないで、用いるサンプルだけm7_gapと同じにしたモデル
+（つまり、残存率=0の地域を取り除いたサンプルを使った、対数変換してないモデル）。
+- c4の有意判定が完全に消えた。c4の有意性が弱まったのは、残存率=0の地域を取り除いたためのようだ。　→　c4実施地域で個人経営体が完全にいなくなる、というパターンが結構あったのではないか（c4に促されて組織経営体が生まれることで個人経営体が組織経営体に吸収されるというパターンもありそうだし、営農継続可能な個人経営体がほとんどいない地域で優先的にc4が導入されたというパターンもありそう）。
+→　ここは、集落単位の分析では見えてこない（以下の「残存率0地域に関する分析」参照）。旧市区町村内で集落をまたいだ影響関係を分析する必要がある（近隣集落に組織経営体が誕生したから、自分の集落の農地はそうした経営体に任せようと考え、離農する人が出てくるなど。）
+
+
+
+```{r}
+df_m4 <- df_tsunami_replicate[
+  as.integer(rownames(model.frame(m4_gap))),
+]
+
+df_m4 |>
+  dplyr::mutate(
+    retention_zero = individual_retention_2015 == 0
+  ) |>
+  dplyr::group_by(retention_zero) |>
+  dplyr::summarise(
+    n = dplyr::n(),
+    c4_rate = mean(c_four == 1, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+やはり、残存率が0の地域ほどc4実施割合が高い。
+
+### 残存率0地域に関する分析
+
+こうした地域で組織経営体はどのようになっているのだろう？
+
+```{r}
+df_structure <- df_m4 |>
+  dplyr::mutate(
+    organization_2010 =
+      type_total_2010 - type_individual_2010,
+
+    organization_2015 =
+      type_total_2015 - type_individual_2015,
+
+    organization_change =
+      organization_2015 - organization_2010,
+
+    retention_zero =
+      individual_retention_2015 == 0
+  )
+```
+
+個人経営体が消滅した地域に組織経営体は残っているか？　→　残ってない
+
+```{r}
+df_structure |>
+  dplyr::filter(retention_zero) |>
+  dplyr::group_by(c_four) |>
+  dplyr::summarise(
+    n = dplyr::n(),
+
+    organization_present =
+      sum(organization_2015 > 0, na.rm = TRUE),
+
+    organization_present_rate =
+      mean(organization_2015 > 0, na.rm = TRUE),
+
+    mean_organization_2015 =
+      mean(organization_2015, na.rm = TRUE),
+
+    .groups = "drop"
+  )
+```
+
+震災前後で組織経営体が増えたか？　→　むしろ減ってる
+```{r}
+df_structure |>
+  dplyr::filter(retention_zero) |>
+  dplyr::group_by(c_four) |>
+  dplyr::summarise(
+    n = dplyr::n(),
+
+    mean_org_2010 =
+      mean(organization_2010, na.rm = TRUE),
+
+    mean_org_2015 =
+      mean(organization_2015, na.rm = TRUE),
+
+    mean_change =
+      mean(organization_change, na.rm = TRUE),
+
+    increase_rate =
+      mean(organization_change > 0, na.rm = TRUE),
+
+    .groups = "drop"
+  )
+```
+
+残存率ゼロ地域では、組織経営体も消滅している。
+
+
+#### memo(仮説)
+
+旧市区町村内で集落をまたいだ影響関係を分析する必要がある（近隣集落に組織経営体が誕生したから、自分の集落の農地はそうした経営体に任せようと考え、離農する人が出てきて、結果的に残存率が0になった等）。
+→　集落の隣接関係を踏まえた分析も必要だ。
 
 ## M8：2020年残存率
 
