@@ -1,0 +1,268 @@
+---
+title: "machinery_gap"
+output: html_document
+date: "2026-11-23"
+# 機械所有割合ギャップに関する分析
+---
+
+# パッケージ読み込み
+
+```{r}
+library(tidyverse)
+library(readxl)
+
+
+library(sandwich)
+library(lmtest)
+```
+
+# データ読み込み
+
+```{r}
+df_tsunami <- readRDS(
+  "data/processed/village_analysis.rds"
+)
+```
+
+
+# 変数作成
+
+## 機械所有経営体割合
+※個人経営体だけでなく組織経営体も含めて求めた割合であることに注意。
+
+```{r}
+
+df_tsunami <- df_tsunami |>
+  mutate(
+    combine_share_2010 =
+      combine_entities_2010 / na_if(entities_total_2010, 0),
+    tractor_share_2010 =
+      tractor_entities_2010 / na_if(entities_total_2010, 0),
+    transplanter_share_2010 =
+      transplanter_entities_2010 / na_if(entities_total_2010, 0)
+  )
+```
+
+
+## 機械所有個人経営体割合（下限値）
+
+```{r}
+df_tsunami <- df_tsunami |>
+  mutate(
+    # 非個人経営体数
+    type_nonindividual_2010 =
+      entities_total_2010 - type_individual_2010,
+
+    # 個人経営体による機械所有割合（下限推計）
+    combine_share_lower_2010 =
+      pmax(0, combine_entities_2010 - type_nonindividual_2010) /
+      na_if(type_individual_2010, 0),
+
+    tractor_share_lower_2010 =
+      pmax(0, tractor_entities_2010 - type_nonindividual_2010) /
+      na_if(type_individual_2010, 0),
+
+    transplanter_share_lower_2010 =
+      pmax(0, transplanter_entities_2010 - type_nonindividual_2010) /
+      na_if(type_individual_2010, 0)
+  )
+```
+
+## 機械所有個人経営体割合（上限値）
+
+```{r}
+df_tsunami <- df_tsunami |>
+  mutate(
+    combine_share_upper_2010 =
+      pmin(combine_entities_2010, type_individual_2010) /
+      na_if(type_individual_2010, 0),
+
+    tractor_share_upper_2010 =
+      pmin(tractor_entities_2010, type_individual_2010) /
+      na_if(type_individual_2010, 0),
+
+    transplanter_share_upper_2010 =
+      pmin(transplanter_entities_2010, type_individual_2010) /
+      na_if(type_individual_2010, 0)
+  )
+```
+
+
+# 各集落の機械所有ギャップ状況
+
+
+## 機械所有経営体数の順位
+
+```{r}
+df_machine_rank <- df_tsunami |>
+  filter(entities_total_2010 > 0) |>
+  filter(
+    !is.na(tractor_entities_2010),
+    !is.na(transplanter_entities_2010),
+    !is.na(combine_entities_2010)
+  ) |>
+  mutate(
+    machine_rank = case_when(
+      tractor_entities_2010 > transplanter_entities_2010 &
+        transplanter_entities_2010 > combine_entities_2010 ~
+        "トラクター > 田植機 > コンバイン",
+
+      transplanter_entities_2010 > tractor_entities_2010 &
+        tractor_entities_2010 > combine_entities_2010 ~
+        "田植機 > トラクター > コンバイン",
+
+      tractor_entities_2010 > combine_entities_2010 &
+        combine_entities_2010 > transplanter_entities_2010 ~
+        "トラクター > コンバイン > 田植機",
+
+      transplanter_entities_2010 > combine_entities_2010 &
+        combine_entities_2010 > tractor_entities_2010 ~
+        "田植機 > コンバイン > トラクター",
+
+      combine_entities_2010 > tractor_entities_2010 &
+        tractor_entities_2010 > transplanter_entities_2010 ~
+        "コンバイン > トラクター > 田植機",
+
+      combine_entities_2010 > transplanter_entities_2010 &
+        transplanter_entities_2010 > tractor_entities_2010 ~
+        "コンバイン > 田植機 > トラクター",
+
+      TRUE ~ "同順位あり"
+    )
+  )
+
+df_machine_rank |>
+  count(machine_rank) |>
+  mutate(share = round(n / sum(n) * 100, 1)) |>
+  arrange(desc(n))
+```
+
+70％程度の集落で、コンバインが最下位（所有している経営体の数がもっとも少ない）。
+同順位があるパターンもそれなりにある（25.7%）。
+
+
+まず、同順位ありなのは、小規模集落なのだろうか？　→　小規模だ（同順位なしにくらべて、経営体数は平均値も中央値も半分以下）
+
+### 同順位ありの特徴
+
+```{r}
+df_machine_rank |>
+  mutate(
+    tie = machine_rank == "同順位あり"
+  ) |>
+  group_by(tie) |>
+  summarise(
+    n = n(),
+    median_entities = median(entities_total_2010),
+    mean_entities = mean(entities_total_2010),
+    .groups = "drop"
+  )
+```
+同順位ありの内訳を見てみる。
+
+```{r}
+df_machine_rank |>
+  filter(machine_rank == "同順位あり") |>
+  mutate(
+    tie_pattern = case_when(
+      tractor_entities_2010 == transplanter_entities_2010 &
+        transplanter_entities_2010 == combine_entities_2010 ~
+        "3機種すべて同数",
+
+      tractor_entities_2010 == transplanter_entities_2010 &
+        tractor_entities_2010 > combine_entities_2010 ~
+        "トラクター＝田植機 ＞ コンバイン",
+
+      tractor_entities_2010 > transplanter_entities_2010 &
+        transplanter_entities_2010 == combine_entities_2010 ~
+        "トラクター ＞ 田植機＝コンバイン",
+
+      tractor_entities_2010 == combine_entities_2010 &
+        tractor_entities_2010 > transplanter_entities_2010 ~
+        "トラクター＝コンバイン ＞ 田植機",
+
+      combine_entities_2010 > tractor_entities_2010 &
+        tractor_entities_2010 == transplanter_entities_2010 ~
+        "コンバイン ＞ トラクター＝田植機",
+
+      transplanter_entities_2010 > tractor_entities_2010 &
+        tractor_entities_2010 == combine_entities_2010 ~
+        "田植機 ＞ トラクター＝コンバイン",
+
+      combine_entities_2010 == transplanter_entities_2010 &
+        transplanter_entities_2010 > tractor_entities_2010 ~
+        "コンバイン＝田植機 ＞ トラクター"
+    )
+  ) |>
+  count(tie_pattern, sort = TRUE)
+```
+
+やはり、コンバインが最下位というパターンが大半。
+
+358集落のうち、コンバインが単独または同率で最少となる集落は349集落（97.5%）。
+一方、トラクターが単独または同率で最多となる集落は333集落（93.0%）。
+→　最大−最小の機械所有ギャップは、ほとんどの集落で「トラクター所有割合−コンバイン所有割合」に一致することがわかる。
+
+
+
+## 機械所有ギャップの分布
+
+```{r}
+df_machine_gap <- df_machine_rank |>
+  mutate(
+    gap_maxmin = pmax(
+      tractor_share_2010,
+      transplanter_share_2010,
+      combine_share_2010
+    ) -
+    pmin(
+      tractor_share_2010,
+      transplanter_share_2010,
+      combine_share_2010
+    ),
+
+    gap_tractor_combine =
+      tractor_share_2010 - combine_share_2010
+  )
+
+df_machine_gap |>
+  summarise(
+    n = n(),
+    mean_maxmin = mean(gap_maxmin),
+    sd_maxmin = sd(gap_maxmin),
+    mean_tc = mean(gap_tractor_combine),
+    sd_tc = sd(gap_tractor_combine),
+    correlation = cor(gap_maxmin, gap_tractor_combine)
+  )
+```
+
+ここでは機械所有ギャップを2つの方法で求めている。
+1. gap_maxmin:　その地域でもっとも所有経営体の多い機械ともっとも少ない機械についての所有経営体数の差
+2. gap_tractor_combine: トラクター所有経営体数-コンバイン所有経営体数
+
+両者の相関は非常に高い（0.95）。また、平均も標準偏差も同程度。
+→　トラクター・コンバインギャップを機械所有ギャップとして用いよう（その方がシンプル）
+
+また、平均に比べて標準偏差がそこそこ大きい（平均±1標準偏差で考えると、トラクター−コンバインのギャップは約21～62ポイント）ので、地域差を把握するための指標として適切だろう。
+
+## 機械所有ギャップの大きい地域の特徴
+
+```{r}
+df_machine_gap |>
+  summarise(
+    cor_gap_tractor = cor(
+      gap_tractor_combine,
+      tractor_share_2010
+    ),
+    cor_gap_combine = cor(
+      gap_tractor_combine,
+      combine_share_2010
+    ),
+    cor_tractor_combine = cor(
+      tractor_share_2010,
+      combine_share_2010
+    )
+  )
+```
+
+機械所有ギャップが大きい集落では、コンバイン所有割合が相対的に低い傾向
