@@ -74,7 +74,7 @@ tsunami_farmland_total_by_village.csv |>
 →結合できない集落はゼロ。
 
 
-## 変数作成
+## 変数作成(データ結合前時点)
 
 ```{r}
 df <-  farmland_total_by_village |> 
@@ -885,3 +885,68 @@ df_tsunami <- df_tsunami |>
 ```
 
 
+# 変数作成(データ結合後)
+
+## 機械所有経営体割合(2010年)
+※個人経営体だけでなく組織経営体も含めて求めた割合であることに注意。
+
+```{r}
+df_tsunami <- df_tsunami |>
+  mutate(
+    combine_share_2010 =
+      combine_entities_2010 / na_if(entities_total_2010, 0),
+    tractor_share_2010 =
+      tractor_entities_2010 / na_if(entities_total_2010, 0),
+    transplanter_share_2010 =
+      transplanter_entities_2010 / na_if(entities_total_2010, 0)
+  )
+```
+
+
+## 機械所有ギャップ(2010年)
+
+```{r}
+df_tsunami <- df_tsunami |>
+  filter(entities_total_2010 > 0) |>
+  filter(
+    !is.na(tractor_entities_2010),
+    !is.na(transplanter_entities_2010),
+    !is.na(combine_entities_2010)
+  ) |> 
+  mutate(
+    gap_maxmin = pmax(
+      tractor_share_2010,
+      transplanter_share_2010,
+      combine_share_2010
+    ) -
+    pmin(
+      tractor_share_2010,
+      transplanter_share_2010,
+      combine_share_2010
+    ),
+
+    gap_tractor_combine =
+      tractor_share_2010 - combine_share_2010
+  )
+
+
+df_tsunami |>
+  summarise(
+    n = n(),
+    mean_maxmin = mean(gap_maxmin),
+    sd_maxmin = sd(gap_maxmin),
+    mean_tc = mean(gap_tractor_combine),
+    sd_tc = sd(gap_tractor_combine),
+    correlation = cor(gap_maxmin, gap_tractor_combine),
+  )
+
+```
+
+ここでは機械所有ギャップを2つの方法で求めている。
+1. gap_maxmin:　その地域でもっとも所有経営体の多い機械ともっとも少ない機械についての所有経営体数の差
+2. gap_tractor_combine: トラクター所有経営体数-コンバイン所有経営体数
+
+両者の相関は非常に高い（0.95）。また、平均も標準偏差も同程度。
+→　トラクター・コンバインギャップを機械所有ギャップとして用いよう（その方がシンプル）
+
+また、平均に比べて標準偏差がそこそこ大きい（平均±1標準偏差で考えると、トラクター−コンバインのギャップは約21～62ポイント）ので、地域差を把握するための指標として適切だろう。

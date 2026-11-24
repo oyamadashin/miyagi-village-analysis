@@ -25,7 +25,14 @@ df_tsunami <- readRDS(
 
 
 ```{r}
-df_m4 |> colnames()
+df_tsunami <- df_tsunami |>
+  mutate(
+    noncorporate_group_2010 =
+      type_noncorporate_2010 - type_individual_2010
+  )
+
+df_tsunami |>
+  count(noncorporate_group_2010, sort = TRUE)
 ```
 
 

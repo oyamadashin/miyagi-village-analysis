@@ -266,3 +266,112 @@ df_machine_gap |>
 ```
 
 機械所有ギャップが大きい集落では、コンバイン所有割合が相対的に低い傾向
+
+# 機械所有ギャップ×〇〇
+
+どういう変数と相関するのかみてみよう（予想としては、機械所有ギャップが大きいことと協業的な傾向とが関連する、ということだけど…）。
+
+
+## 組織経営体関連の変数をつくる
+
+さきに、組織経営体関連の変数をつくっておく。
+
+まずは、主要な組織形態別変数の欠損状況を確認。
+
+```{r}
+df_tsunami |>
+  select(starts_with("type_") & ends_with("_2010")) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "variable",
+    values_to = "value"
+  ) |>
+  group_by(variable) |>
+  summarise(
+    n_na = sum(is.na(value)),
+    n_zero = sum(value == 0, na.rm = TRUE),
+    n_positive = sum(value > 0, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(desc(n_positive))
+```
+
+全体的に、組織経営体関連の経営体が存在する集落は少ない。
+
+```{r}
+df_tsunami <- df_tsunami |>
+  mutate(
+    nonindividual_entities_2010 =
+      type_total_2010 - type_individual_2010,
+
+    noncorporate_group_2010 =
+      type_noncorporate_2010 - type_individual_2010
+  )
+
+# 非個人経営体数の分布
+df_tsunami |>
+  filter(type_total_2010 > 0) |>
+  count(nonindividual_entities_2010)
+
+# 法人化していない組織経営体数の分布
+df_tsunami |>
+  filter(type_total_2010 > 0) |>
+  count(noncorporate_group_2010)
+```
+
+「非個人経営体」「法人化していない組織経営体」というくくりでまとめれば、存在する集落はそれなりにある。
+
+
+```{r}
+df_tsunami <- df_tsunami |>
+  mutate(
+    nonindividual_presence_2010 =
+      as.integer(nonindividual_entities_2010 > 0),
+
+    noncorporate_group_presence_2010 =
+      as.integer(noncorporate_group_2010 > 0),
+
+    corporate_presence_2010 =
+      as.integer(type_corporate_2010 > 0)
+  )
+```
+
+
+```{r}
+df_tsunami |>
+  filter(
+    !is.na(noncorporate_group_presence_2010),
+    !is.na(gap_tractor_combine)
+  ) |>
+  group_by(noncorporate_group_presence_2010) |>
+  summarise(
+    n = n(),
+    mean_gap = mean(gap_tractor_combine),
+    mean_tractor = mean(tractor_share_2010),
+    mean_transplanter = mean(transplanter_share_2010),
+    mean_combine = mean(combine_share_2010),
+    median_entities = median(entities_total_2010),
+    .groups = "drop"
+  )
+```
+
+```{r}
+df_tsunami |>
+  filter(
+    !is.na(noncorporate_group_presence_2010),
+    !is.na(gap_tractor_combine)
+  ) |>
+  ggplot(
+    aes(
+      x = factor(noncorporate_group_presence_2010),
+      y = gap_tractor_combine
+    )
+  ) +
+  geom_boxplot() +
+  labs(
+    x = "非法人の組織経営体の有無",
+    y = "機械所有ギャップ"
+  ) +
+  theme_bw()
+```
+

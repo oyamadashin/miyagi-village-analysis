@@ -353,9 +353,31 @@ df_tsunami <- df_tsunami |>
   filter(!kcity_code %in% c("-9", "99"))
 
 
+# 変数作成(データ結合後)----
+
+## 機械所有経営体割合(2010年)----
+# 個人経営体だけでなく組織経営体も含めて求めた割合であることに注意。
+df_tsunami <- df_tsunami |>
+  mutate(
+    combine_share_2010 =
+      combine_entities_2010 / na_if(entities_total_2010, 0),
+    tractor_share_2010 =
+      tractor_entities_2010 / na_if(entities_total_2010, 0),
+    transplanter_share_2010 =
+      transplanter_entities_2010 / na_if(entities_total_2010, 0)
+  )
+
+## 機械所有ギャップ(2010年)----
+df_tsunami <- df_tsunami |>
+  mutate(
+      gap_tractor_combine =
+      tractor_share_2010 - combine_share_2010
+  )
+
 
 # 普段の分析に使うファイルを生成---- 
 ## preparation.Rの内容を更新したときだけ、下記のファイルを生成し直すこと。
+
 
 saveRDS(
   df_tsunami,
