@@ -10,8 +10,6 @@ date: "2026-11-23"
 ```{r}
 library(tidyverse)
 library(readxl)
-
-
 library(sandwich)
 library(lmtest)
 ```

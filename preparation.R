@@ -234,6 +234,27 @@ df_tsunami <- df_tsunami |>
             relationship = "one-to-one")
 
 
+# 結合：寄り合い----
+
+# データ読み込み
+yoriai_2010 <- read_excel(
+  "data/raw/census/SA7003_2010_2025_00.xlsx",
+  col_types = "text"
+)
+
+# 変数に年次をつける。
+yoriai_2010_value_year <- prepare_census(yoriai_2010, 2010)
+
+
+#結合
+df_tsunami <- df_tsunami |>
+  left_join(yoriai_2010_value_year,
+            by = c("KEY" = "key"),
+            relationship = "one-to-one") 
+
+
+
+
 
 # 変数名等の整理----
 
@@ -284,9 +305,42 @@ name_map <- c(
   "地方公共団体・財産区" = "type_public",
   "法人化していない_計" = "type_noncorporate",
   "法人化していない_個人経営体" = "type_individual",
-  "法人化していない_任意団体" = "type_voluntary_group"
+  "法人化していない_任意団体" = "type_voluntary_group",
+  
+  # 寄り合い開催状況
+  "寄り合いがある_計" = "meeting_total",
+  "寄り合いがある_1～2回" = "meeting_1_2",
+  "寄り合いがある_3～5回" = "meeting_3_5",
+  "寄り合いがある_6～11回" = "meeting_6_11",
+  "寄り合いがある_12～23回" = "meeting_12_23",
+  "寄り合いがある_24回以上" = "meeting_24_plus",
+  "寄り合いを開催しなかった" = "meeting_none",
+  "寄り合いの開催回数" = "meeting_count",
+  
+  # 寄り合いの議題
+  "寄り合いの議題_農業生産にかかる事項" = 
+    "meeting_topic_production",
+  "寄り合いの議題_農道・農業用用排水路・ため池の管理" = 
+    "meeting_topic_agri_infrastructure",
+  "寄り合いの議題_集落共有財産・共用施設の管理" = 
+    "meeting_topic_communal_assets",
+  "寄り合いの議題_環境美化・自然環境の保全" = 
+    "meeting_topic_environment",
+  "寄り合いの議題_農業集落行事（祭り・イベント等）の計画・推進" = 
+    "meeting_topic_events",
+  "寄り合いの議題_農業集落内の福祉・厚生" = 
+    "meeting_topic_welfare",
+  "寄り合いの議題_定住を推進する取組" = 
+    "meeting_topic_settlement",
+  "寄り合いの議題_グリーン・ツーリズムの取組" = 
+    "meeting_topic_green_tourism",
+  "寄り合いの議題_６次産業化への取組" = 
+    "meeting_topic_sixth_industry",
+  "寄り合いの議題_再生可能エネルギーへの取組" = 
+    "meeting_topic_renewable_energy",
+  "寄り合いの議題_その他" = 
+    "meeting_topic_other"
 )
-
 # 変数名対応表をCSVとして保存
 name_map |>
   enframe(
@@ -328,7 +382,7 @@ names(df_tsunami) <- new_names
 ### 数値型に変換したい変数を抽出
 numeric_vars <- names(df_tsunami) |>
   str_subset(
-    "^(entities_total|size_|transplanter_|tractor_|combine_|type_)"
+    "^(entities_total|size_|transplanter_|tractor_|combine_|type_|meeting_)"
   )
 
 

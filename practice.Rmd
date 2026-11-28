@@ -23,6 +23,24 @@ df_tsunami <- readRDS(
 )
 ```
 
+```{r}
+df_tsunami |>
+  select(starts_with("meeting_")) |>
+  purrr::map_dfr(
+    ~ tibble(
+      n_na = sum(is.na(.x)),
+      n_zero = sum(.x == 0, na.rm = TRUE),
+      n_positive = sum(.x > 0, na.rm = TRUE)
+    ),
+    .id = "variable"
+  ) |>
+  print(n = Inf)
+```
+
+```{r}
+df_tsunami |> colnames()
+```
+
 
 ```{r}
 df_tsunami <- df_tsunami |>

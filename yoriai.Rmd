@@ -1,0 +1,222 @@
+---
+title: "yoriai"
+output: html_document
+date: "2026-11-28"
+# 寄り合いに関する分析
+---
+
+# パッケージ読み込み
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(sandwich)
+library(lmtest)
+```
+
+# データ読み込み
+
+```{r}
+df_tsunami <- readRDS(
+  "data/processed/village_analysis.rds"
+)
+```
+
+
+# 分布チェック
+
+## 変数全体の傾向
+```{r}
+df_tsunami |>
+  select(starts_with("meeting_")) |>
+  purrr::map_dfr(
+    ~ tibble(
+      n_na = sum(is.na(.x)),
+      n_zero = sum(.x == 0, na.rm = TRUE),
+      n_positive = sum(.x > 0, na.rm = TRUE)
+    ),
+    .id = "variable"
+  ) |>
+  print(n = Inf)
+```
+
+議題系の変数は一部、すべてがNAになっている（定住促進、グリーン・ツーリズム、6次産業化、再生可能エネルギー、その他）。
+
+## 寄り合い開催回数
+
+```{r}
+df_tsunami |> 
+  pull(meeting_count_2010) |> 
+  summary()
+
+df_tsunami |> 
+  ggplot(aes(x=meeting_count_2010)) +
+  geom_histogram(binwidth = 3,  boundary = 0) +
+  labs(
+    x = "寄り合い開催回数（2010年）",
+    y = "集落数"
+  ) +
+  theme_bw()
+```
+
+大半は25回以内に収まっているけど、なかには100回近く寄り合いをやっている集落もある。
+
+
+# 機械所有ギャップとの関連
+
+## 機械所有ギャップ×寄合回数
+
+```{r}
+df_tsunami |>
+  ggplot(
+    aes(
+      x = meeting_count_2010,
+      y = gap_tractor_combine
+    )
+  ) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm") +
+  labs(
+    x = "寄り合い開催回数（2010年）",
+    y = "機械所有ギャップ（2010年）"
+  ) +
+  theme_bw()
+
+
+df_tsunami |>
+  summarise(
+    pearson = cor(
+      meeting_count_2010,
+      gap_tractor_combine,
+      use = "complete.obs",
+      method = "pearson"
+    ),
+    spearman = cor(
+      meeting_count_2010,
+      gap_tractor_combine,
+      use = "complete.obs",
+      method = "spearman"
+    )
+  )
+```
+
+ほぼ関連性なし。
+
+## 議題別の機械所有ギャップとの関連
+
+```{r}
+df_tsunami |>
+  select(
+    gap_tractor_combine,
+    meeting_topic_production_2010,
+    meeting_topic_agri_infrastructure_2010,
+    meeting_topic_communal_assets_2010,
+    meeting_topic_environment_2010,
+    meeting_topic_events_2010,
+    meeting_topic_welfare_2010
+  ) |>
+  pivot_longer(
+    cols = starts_with("meeting_topic_"),
+    names_to = "topic",
+    values_to = "presence"
+  ) |>
+  filter(
+    !is.na(presence),
+    !is.na(gap_tractor_combine)
+  ) |>
+  group_by(topic, presence) |>
+  summarise(
+    n = n(),
+    mean_gap = mean(gap_tractor_combine),
+    sd_gap = sd(gap_tractor_combine),
+    .groups = "drop"
+  ) |>
+  print(n = Inf)
+
+df_tsunami |>
+  select(
+    gap_tractor_combine,
+    meeting_topic_production_2010,
+    meeting_topic_agri_infrastructure_2010,
+    meeting_topic_communal_assets_2010,
+    meeting_topic_environment_2010,
+    meeting_topic_events_2010,
+    meeting_topic_welfare_2010
+  ) |>
+  pivot_longer(
+    cols = starts_with("meeting_topic_"),
+    names_to = "topic",
+    values_to = "presence"
+  ) |>
+  filter(
+    !is.na(presence),
+    !is.na(gap_tractor_combine)
+  ) |>
+  ggplot(
+    aes(
+      x = factor(presence),
+      y = gap_tractor_combine
+    )
+  ) +
+  geom_boxplot() +
+  facet_wrap(~ topic, ncol = 3) +
+  labs(
+    x = "議題として取り上げているか",
+    y = "機械所有ギャップ"
+  ) +
+  theme_bw()
+```
+
+「農業関連基盤の管理」「農業生産」「集落行事」「共有財産・施設の管理」「環境美化・環境保全」が議題にでてくる地域だと機械所有ギャップが小さくなる傾向。
+
+「福祉・厚生」が議題だと逆に機械所有ギャップが大きくなる。
+
+
+機械所有ギャップが大きいと、共有財産（コンバインなど）について議論する必要がでてきそうだけど、逆に、そうした議論をする地域は機械所有ギャップが小さい。
+
+あるいは、機械所有ギャップが小さいと経営体同士が対等の関係になるので、寄り合いが多くなる、ということもありそうだけど。
+
+
+```{r}
+df_tsunami |>
+  select(
+    entities_total_2010,
+    gap_tractor_combine,
+    tractor_share_2010,
+    transplanter_share_2010,
+    combine_share_2010,
+    meeting_topic_production_2010,
+    meeting_topic_agri_infrastructure_2010,
+    meeting_topic_communal_assets_2010,
+    meeting_topic_environment_2010,
+    meeting_topic_events_2010,
+    meeting_topic_welfare_2010
+  ) |>
+  pivot_longer(
+    cols = starts_with("meeting_topic_"),
+    names_to = "topic",
+    values_to = "presence"
+  ) |>
+  filter(
+    !is.na(presence),
+    !is.na(gap_tractor_combine)
+  ) |>
+  group_by(topic, presence) |>
+  summarise(
+    n = n(),
+    mean_gap = mean(gap_tractor_combine),
+    mean_tractor = mean(tractor_share_2010, na.rm = TRUE),
+    mean_transplanter = mean(transplanter_share_2010, na.rm = TRUE),
+    mean_combine = mean(combine_share_2010, na.rm = TRUE),
+    median_entities = median(entities_total_2010, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  print(n = Inf, width = Inf)
+```
+
+やはり、機械所有ギャップはコンバインによりもたらされる傾向。
+
+また、議題としてある話題を取り上げているという集落は、集落規模が比較的大きい。ただし、「福祉・厚生」については、むしろ集落規模が比較的小さい方が取り上げる傾向。
+
+
+ただ、ここでいう「規模」というのは、経営体数なのだよな。経営体が多く残っているということは、それだけ個人志向の強い地域なのだ、という可能性も排除はできない。
